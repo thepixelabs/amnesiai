@@ -5,7 +5,7 @@
 # git your ai setup
 
 [![CI](https://github.com/thepixelabs/amensiai/actions/workflows/ci.yml/badge.svg)](https://github.com/thepixelabs/amensiai/actions)
-[![Go 1.22](https://img.shields.io/badge/go-1.22-00ADD8?logo=go)](https://go.dev)
+[![Go 1.24](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev)
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 
 </div>
