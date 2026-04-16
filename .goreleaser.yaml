@@ -29,6 +29,10 @@ checksum:
 snapshot:
   version_template: "{{incpatch .Version}}-next"
 
+release:
+  # semantic-release already created the release with notes; just add assets.
+  mode: keep-existing
+
 changelog:
   sort: asc
   filters:

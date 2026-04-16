@@ -220,7 +220,7 @@ func (p *Provider) Restore(snapshot map[string][]byte) error {
 		// Only restore files whose top-level component is in the allowlist.
 		topLevel := strings.SplitN(rel, string(filepath.Separator), 2)[0]
 		if !allowedTopLevel[topLevel] && rel != topLevel {
-			// rel IS topLevel (no separator) — check allowlist for plain files
+			continue
 		}
 		// Simpler check: the file is in the allowlist tree.
 		// We already guard credential files above; allow anything else in the

@@ -64,8 +64,17 @@ module.exports = {
           "chore(release): ${nextRelease.version}\n\n${nextRelease.notes}",
       },
     ],
-    // Create the GitHub Release stub (release notes body, tag). goreleaser
-    // will upload the binary assets when it runs on the resulting vX.Y.Z tag.
+    // Create the GitHub Release with release notes. goreleaser runs next and
+    // adds the binary assets to this release (keep-existing mode preserves notes).
     "@semantic-release/github",
+    // Build and publish cross-platform binaries + update homebrew-tap formula.
+    // goreleaser uses keep-existing mode so it only adds assets without
+    // overwriting the release notes written above.
+    [
+      "@semantic-release/exec",
+      {
+        publishCmd: "goreleaser release --clean",
+      },
+    ],
   ],
 };

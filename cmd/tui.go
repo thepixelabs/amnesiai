@@ -123,16 +123,6 @@ func buildBanner() string {
 	raw := strings.TrimRight(f.String(), "\n")
 	lines := strings.Split(raw, "\n")
 
-	maxW := 0
-	for _, l := range lines {
-		if w := len([]rune(l)); w > maxW {
-			maxW = w
-		}
-	}
-	if maxW == 0 {
-		maxW = 1
-	}
-
 	var sb strings.Builder
 	for _, line := range lines {
 		runes := []rune(line)
@@ -288,8 +278,8 @@ type selectedMsg struct{ action menuAction }
 
 type tuiModel struct {
 	cursor   int
-	phase    int          // footer shine-sweep phase counter
-	selected menuAction   // set when user commits a choice; causes quit
+	phase    int        // footer shine-sweep phase counter
+	selected menuAction // set when user commits a choice; causes quit
 	greeting tuiGreeting
 	width    int
 	height   int

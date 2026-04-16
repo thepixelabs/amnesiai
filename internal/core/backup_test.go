@@ -114,7 +114,7 @@ func newStore(t *testing.T) storage.Storage {
 // twoFileSnapshot returns a snapshot map with two distinct files.
 func twoFileSnapshot() map[string][]byte {
 	return map[string][]byte{
-		"config/settings.json": []byte(`{"theme":"dark"}`),
+		"config/settings.json":    []byte(`{"theme":"dark"}`),
 		"config/keybindings.json": []byte(`{"copy":"ctrl+c"}`),
 	}
 }

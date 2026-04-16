@@ -19,12 +19,12 @@ type GitRemote struct {
 
 // Config holds the top-level amensiai configuration.
 type Config struct {
-	StorageMode string   `mapstructure:"storage_mode"` // "local" | "git-local" | "git-remote"
-	BackupDir   string   `mapstructure:"backup_dir"`   // absolute path for backups
-	Providers   []string `mapstructure:"providers"`    // ["claude","gemini","copilot","codex"] or subset
+	StorageMode string    `mapstructure:"storage_mode"` // "local" | "git-local" | "git-remote"
+	BackupDir   string    `mapstructure:"backup_dir"`   // absolute path for backups
+	Providers   []string  `mapstructure:"providers"`    // ["claude","gemini","copilot","codex"] or subset
 	GitRemote   GitRemote `mapstructure:"git_remote"`
-	AutoCommit  bool     `mapstructure:"auto_commit"` // true=commit automatically
-	AutoPush    bool     `mapstructure:"auto_push"`   // true=push automatically (git-remote only)
+	AutoCommit  bool      `mapstructure:"auto_commit"` // true=commit automatically
+	AutoPush    bool      `mapstructure:"auto_push"`   // true=push automatically (git-remote only)
 }
 
 // DefaultProviders returns the full list of supported provider names.

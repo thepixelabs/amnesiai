@@ -193,10 +193,10 @@ func TestParseLabels(t *testing.T) {
 
 func TestFilterChanged(t *testing.T) {
 	tests := []struct {
-		name       string
-		statuses   []string
-		wantLen    int
-		wantNilOk  bool // true means nil result is acceptable (no changes)
+		name      string
+		statuses  []string
+		wantLen   int
+		wantNilOk bool // true means nil result is acceptable (no changes)
 	}{
 		{
 			name:      "EmptyInput",
@@ -211,9 +211,9 @@ func TestFilterChanged(t *testing.T) {
 			wantNilOk: true,
 		},
 		{
-			name:    "MixedFiltersCorrectly",
+			name:     "MixedFiltersCorrectly",
 			statuses: []string{"added", "unchanged", "deleted"},
-			wantLen: 2,
+			wantLen:  2,
 		},
 	}
 
@@ -245,9 +245,9 @@ func TestFilterChanged(t *testing.T) {
 
 func TestStatusSymbol(t *testing.T) {
 	tests := []struct {
-		name   string
-		input  string
-		want   string
+		name  string
+		input string
+		want  string
 	}{
 		{"Added", "added", "+"},
 		{"Modified", "modified", "~"},
