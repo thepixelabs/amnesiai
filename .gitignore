@@ -4,6 +4,9 @@ dist/
 amensiai
 amensiai.exe
 
+# Node (semantic-release tooling)
+node_modules/
+
 # Go
 *.exe
 *.exe~
@@ -35,8 +38,12 @@ secrets.local.*
 auth.json
 .credentials.json
 
-# amensiai local config (never commit user config)
-~/.amensiai/config.toml
+# amensiai local config lives at ~/.amensiai/config.toml — it is outside the
+# repo root and cannot be committed. No .gitignore entry needed here.
+
+# Claude Code local IDE state — contains machine-local tool permissions and
+# internal path references that must never be committed.
+.claude/
 
 # macOS
 .DS_Store
