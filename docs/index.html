@@ -114,6 +114,32 @@
     }
 
     /* =====================================================
+       LIGHT THEME OVERRIDES
+       ===================================================== */
+    [data-theme="light"] {
+      --color-bg:           #F6F8FA;
+      --color-bg-elevated:  #FFFFFF;
+      --color-border:       #D0D7DE;
+      --color-border-muted: #E6E9EE;
+      --color-text:         #1F2328;
+      --color-muted:        #636C76;
+      --color-silver:       #57606A;
+      --color-accent:       #6C63FF;
+      --color-accent-hover: #5046e5;
+      --color-cyan:         #0969DA;
+      --color-green:        #1A7F37;
+      --color-amber:        #9A6700;
+    }
+    /* light mode: nav bg */
+    [data-theme="light"] .nav {
+      background-color: rgba(246, 248, 250, 0.85);
+    }
+    /* light mode: aurora orbs lighter */
+    [data-theme="light"] .aurora-bg__orb--1 { opacity: 0.2; }
+    [data-theme="light"] .aurora-bg__orb--2 { opacity: 0.15; }
+    [data-theme="light"] .aurora-bg__orb--3 { opacity: 0.15; }
+
+    /* =====================================================
        RESET & BASE
        ===================================================== */
     *, *::before, *::after {
@@ -1597,6 +1623,35 @@
       outline-offset: 2px;
     }
 
+    /* ── Theme toggle ── */
+    .theme-toggle {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      background: var(--color-bg-elevated);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+    .theme-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--color-muted);
+      transition: background 0.15s ease, color 0.15s ease;
+      cursor: pointer;
+      border: none;
+      background: transparent;
+    }
+    .theme-btn:hover { color: var(--color-text); }
+    .theme-btn.active {
+      background: var(--color-accent);
+      color: #fff;
+    }
+
   </style>
 </head>
 <body>
@@ -1619,13 +1674,24 @@
             alt=""
             width="26"
             height="26"
-            onerror="this.style.display='none'"
 ><span class="nav__wordmark">amen<span>siai</span></span>
         </a>
+        <div class="theme-toggle" role="group" aria-label="Color theme">
+          <button class="theme-btn" id="theme-system" onclick="setTheme('system')" aria-label="System theme" title="System">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+          </button>
+          <button class="theme-btn" id="theme-light" onclick="setTheme('light')" aria-label="Light theme" title="Light">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+          </button>
+          <button class="theme-btn" id="theme-dark" onclick="setTheme('dark')" aria-label="Dark theme" title="Dark">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+          </button>
+        </div>
         <ul class="nav__links" role="list">
           <li><a href="#how-it-works">How it works</a></li>
           <li><a href="#providers">Providers</a></li>
           <li><a href="#storage">Storage</a></li>
+          <li><a href="https://pixelabs.net" target="_blank" rel="noopener noreferrer">PixelLabs</a></li>
           <li>
             <a
               href="https://github.com/thepixelabs/amensiai"
@@ -2264,6 +2330,43 @@
       };
       window.addEventListener('scroll', handler, { passive: true });
     }());
+
+    // ── Theme toggle (system / light / dark) ──────────────────────────
+    var THEME_KEY = 'amensiai-theme';
+
+    function applyTheme(t) {
+      var root = document.documentElement;
+      if (t === 'light') {
+        root.setAttribute('data-theme', 'light');
+      } else if (t === 'dark') {
+        root.removeAttribute('data-theme');
+      } else {
+        // system
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) root.removeAttribute('data-theme');
+        else root.setAttribute('data-theme', 'light');
+      }
+      ['system', 'light', 'dark'].forEach(function (id) {
+        var btn = document.getElementById('theme-' + id);
+        if (btn) btn.classList.toggle('active', id === t);
+      });
+    }
+
+    function setTheme(t) {
+      localStorage.setItem(THEME_KEY, t);
+      applyTheme(t);
+    }
+
+    function initTheme() {
+      var saved = localStorage.getItem(THEME_KEY) || 'system';
+      applyTheme(saved);
+    }
+
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+      if ((localStorage.getItem(THEME_KEY) || 'system') === 'system') applyTheme('system');
+    });
+
+    initTheme();
   </script>
 
 </body>
