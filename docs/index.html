@@ -1,0 +1,2270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="amensiai backs up and restores AI coding assistant configs — Claude Code, Gemini CLI, GitHub Copilot, Codex CLI — in one command. Install via Homebrew. New machine, same AI.">
+  <meta name="author" content="The Pixel Labs">
+
+  <!-- Canonical -->
+  <link rel="canonical" href="https://amensiai.pixelabs.net/">
+
+  <!-- Open Graph / Social sharing -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://amensiai.pixelabs.net/">
+  <meta property="og:site_name" content="amensiai">
+  <meta property="og:title" content="amensiai — New machine, same AI.">
+  <meta property="og:description" content="amensiai backs up and restores AI coding assistant configs — Claude Code, Gemini CLI, GitHub Copilot, Codex CLI — in one command. Install via Homebrew. New machine, same AI.">
+  <meta property="og:image" content="https://amensiai.pixelabs.net/images/amensiai_hero.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@thepixelabs">
+  <meta name="twitter:title" content="amensiai — New machine, same AI.">
+  <meta name="twitter:description" content="amensiai backs up and restores AI coding assistant configs — Claude Code, Gemini CLI, GitHub Copilot, Codex CLI — in one command. Install via Homebrew. New machine, same AI.">
+  <meta name="twitter:image" content="https://amensiai.pixelabs.net/images/amensiai_hero.png">
+
+  <title>amensiai — New machine, same AI.</title>
+
+  <link rel="icon" href="favicon.ico" sizes="any">
+  <link rel="icon" href="favicon.ico" type="image/x-icon">
+  <link rel="apple-touch-icon" href="images/apple-touch-icon.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <!-- Preload LCP hero image -->
+  <link rel="preload" as="image" href="images/amensiai_hero.png" fetchpriority="high">
+
+  <!-- Structured data: SoftwareApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "amensiai",
+    "alternateName": "amensiai CLI",
+    "description": "Back up and restore AI coding assistant configurations — Claude Code, Gemini CLI, GitHub Copilot, Codex CLI — in one command. Versioned, encrypted, and ready to restore anywhere.",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, Linux",
+    "url": "https://amensiai.pixelabs.net/",
+    "downloadUrl": "https://github.com/thepixelabs/amensiai/releases",
+    "installUrl": "https://github.com/thepixelabs/amensiai",
+    "softwareVersion": "0.1",
+    "releaseNotes": "https://github.com/thepixelabs/amensiai/releases",
+    "license": "https://github.com/thepixelabs/amensiai/blob/main/LICENSE",
+    "author": {
+      "@type": "Organization",
+      "name": "The Pixel Labs",
+      "url": "https://pixelabs.net"
+    },
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "potentialAction": {
+      "@type": "InstallAction",
+      "target": "brew install thepixelabs/tap/amensiai"
+    }
+  }
+  </script>
+
+  <style>
+    /* =====================================================
+       DESIGN TOKENS
+       ===================================================== */
+    :root {
+      --color-bg:           #0D1117;
+      --color-bg-elevated:  #161B22;
+      --color-border:       #30363D;
+      --color-border-muted: #21262D;
+      --color-accent:       #6C63FF;
+      --color-accent-hover: #7B73FF;
+      --color-cyan:         #00D4FF;
+      --color-amber:        #F0883E;
+      --color-text:         #E6EDF3;
+      --color-muted:        #8B949E;
+      --color-silver:       #C0C7D4;
+      --color-green:        #2ECC71;
+
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      --font-mono: 'JetBrains Mono', "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+      --space-1:  4px;
+      --space-2:  8px;
+      --space-3:  12px;
+      --space-4:  16px;
+      --space-5:  20px;
+      --space-6:  24px;
+      --space-8:  32px;
+      --space-10: 40px;
+      --space-12: 48px;
+      --space-16: 64px;
+      --space-20: 80px;
+      --space-24: 96px;
+
+      --radius-sm: 4px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 20px;
+
+      --container-max: 1200px;
+      --content-max:   680px;
+    }
+
+    /* =====================================================
+       RESET & BASE
+       ===================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+      background-color: var(--color-bg);
+      color: var(--color-text);
+      font-family: var(--font-sans);
+      font-size: clamp(1rem, 1.5vw, 1.0625rem);
+      line-height: 1.7;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    a {
+      color: var(--color-accent);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus-visible {
+      text-decoration: underline;
+      outline-offset: 3px;
+    }
+
+    a:focus-visible {
+      outline: 2px solid var(--color-accent);
+      border-radius: var(--radius-sm);
+    }
+
+    img {
+      display: block;
+      max-width: 100%;
+    }
+
+    ul, ol {
+      list-style: none;
+    }
+
+    /* =====================================================
+       LAYOUT
+       ===================================================== */
+    .container {
+      width: 100%;
+      max-width: var(--container-max);
+      margin-inline: auto;
+      padding-inline: var(--space-6);
+    }
+
+    /* =====================================================
+       FILM GRAIN CANVAS (fixed, z:9)
+       ===================================================== */
+    #grain-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 9;
+      opacity: 0.038;
+      mix-blend-mode: overlay;
+      will-change: contents;
+    }
+
+    /* =====================================================
+       NAV
+       ===================================================== */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 200;
+      background-color: rgba(13, 17, 23, 0.75);
+      backdrop-filter: blur(16px) saturate(1.6);
+      -webkit-backdrop-filter: blur(16px) saturate(1.6);
+      border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+      transition: background-color 0.3s ease;
+    }
+
+    .nav__inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 56px;
+      max-width: var(--container-max);
+      margin-inline: auto;
+      padding-inline: var(--space-6);
+    }
+
+    .nav__logo {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-sans);
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--color-text);
+      letter-spacing: -0.02em;
+    }
+
+    .nav__logo img {
+      display: inline;
+      width: 26px;
+      height: 26px;
+      object-fit: contain;
+    }
+
+    .nav__wordmark { color: inherit; }
+    .nav__wordmark > span { color: var(--color-accent); }
+
+    .nav__links {
+      display: flex;
+      align-items: center;
+      gap: var(--space-6);
+    }
+
+    .nav__links a {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--color-muted);
+      transition: color 0.15s ease;
+    }
+
+    .nav__links a:hover {
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    .nav__cta {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text) !important;
+      background: rgba(108, 99, 255, 0.15);
+      border: 1px solid rgba(108, 99, 255, 0.35);
+      border-radius: var(--radius-md);
+      padding: 5px 14px;
+      transition: background-color 0.2s ease, border-color 0.2s ease !important;
+    }
+
+    .nav__cta:hover {
+      background: rgba(108, 99, 255, 0.28) !important;
+      border-color: rgba(108, 99, 255, 0.6) !important;
+      text-decoration: none !important;
+    }
+
+    /* =====================================================
+       HERO
+       ===================================================== */
+    .hero {
+      position: relative;
+      isolation: isolate;
+      min-height: 100svh;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      padding-top: 56px; /* nav height */
+    }
+
+    /* Aurora background */
+    .aurora-bg {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 0;
+      filter: blur(72px) saturate(1.4);
+      -webkit-mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 40%, transparent 80%);
+              mask-image: radial-gradient(ellipse 80% 70% at 50% 40%, black 40%, transparent 80%);
+      will-change: filter;
+    }
+
+    .aurora-bg__orb { position: absolute; border-radius: 50%; opacity: 0.55; }
+    .aurora-bg__orb--1 { width:55%; aspect-ratio:1; top:-10%; left:-5%; background:radial-gradient(circle,rgba(108,99,255,0.9) 0%,transparent 70%); animation:aurora-drift-1 11s ease-in-out infinite alternate; }
+    .aurora-bg__orb--2 { width:45%; aspect-ratio:1; top:20%; right:-8%; background:radial-gradient(circle,rgba(0,212,255,0.75) 0%,transparent 68%); animation:aurora-drift-2 13s ease-in-out infinite alternate; }
+    .aurora-bg__orb--3 { width:38%; aspect-ratio:1; bottom:-5%; left:30%; background:radial-gradient(circle,rgba(55,35,180,0.8) 0%,transparent 65%); animation:aurora-drift-3 7s ease-in-out infinite alternate; }
+
+    @keyframes aurora-drift-1 { from{transform:translate(0,0) scale(1)} to{transform:translate(8%,12%) scale(1.15)} }
+    @keyframes aurora-drift-2 { from{transform:translate(0,0) scale(1)} to{transform:translate(-6%,8%) scale(0.92)} }
+    @keyframes aurora-drift-3 { from{transform:translate(0,0) scale(1)} to{transform:translate(5%,-10%) scale(1.1)} }
+
+    @media (prefers-reduced-motion: reduce) {
+      .aurora-bg__orb { animation: none; }
+    }
+
+    /* Scanlines */
+    .scanlines::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 5;
+      background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0px, transparent 3px,
+        rgba(0, 0, 0, 0.08) 3px, rgba(0, 0, 0, 0.08) 4px
+      );
+      animation: scanline-scroll 8s linear infinite;
+      will-change: background-position;
+    }
+
+    @keyframes scanline-scroll {
+      from { background-position: 0 0; }
+      to   { background-position: 0 80px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .scanlines::after { animation: none; }
+    }
+
+    /* Hero layout: content left, bird right bleeding off edge */
+    .hero__inner {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: var(--container-max);
+      margin-inline: auto;
+      padding-inline: var(--space-6);
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      align-items: center;
+      min-height: calc(100svh - 56px);
+      gap: 0;
+    }
+
+    @media (max-width: 900px) {
+      .hero__inner {
+        grid-template-columns: 1fr;
+        padding-block: var(--space-20) var(--space-12);
+      }
+    }
+
+    .hero__content {
+      max-width: 620px;
+    }
+
+    .hero__eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-cyan);
+      background-color: rgba(0, 212, 255, 0.08);
+      border: 1px solid rgba(0, 212, 255, 0.22);
+      border-radius: var(--radius-sm);
+      padding: var(--space-1) var(--space-3);
+      margin-bottom: var(--space-6);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero__eyebrow::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-cyan);
+      box-shadow: 0 0 6px var(--color-cyan);
+      animation: blink-dot 2.4s ease-in-out infinite;
+    }
+
+    @keyframes blink-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .hero__eyebrow::before { animation: none; }
+    }
+
+    .hero__headline {
+      font-family: var(--font-sans);
+      font-size: clamp(2.75rem, 6vw, 5rem);
+      font-weight: 700;
+      line-height: 1.0;
+      letter-spacing: -0.03em;
+      color: var(--color-text);
+      margin-bottom: var(--space-6);
+    }
+
+    .hero__headline .line-dim {
+      color: rgba(230, 237, 243, 0.42);
+    }
+
+    .hero__headline .line-accent {
+      color: var(--color-accent);
+    }
+
+    .hero__tagline {
+      font-family: var(--font-mono);
+      font-size: clamp(0.875rem, 1.2vw, 1rem);
+      color: var(--color-muted);
+      margin-bottom: var(--space-4);
+      letter-spacing: 0.01em;
+    }
+
+    .hero__tagline .tag-accent {
+      color: var(--color-amber);
+    }
+
+    .hero__subhead {
+      font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+      color: var(--color-muted);
+      line-height: 1.7;
+      margin-bottom: var(--space-8);
+      max-width: 520px;
+    }
+
+    .hero__subhead strong {
+      color: var(--color-silver);
+      font-weight: 500;
+    }
+
+    .hero__actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-3);
+      align-items: center;
+    }
+
+    /* Bird column */
+    .hero__bird-col {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-right: calc(-1 * var(--space-6));
+    }
+
+    @media (max-width: 900px) {
+      .hero__bird-col {
+        justify-content: center;
+        margin-right: 0;
+        order: -1;
+      }
+    }
+
+    .mascot-wrapper {
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+    }
+
+    /* Pulsing glow beneath mascot */
+    .mascot-wrapper::before {
+      content: '';
+      position: absolute;
+      bottom: -5%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 70%;
+      height: 40%;
+      background: radial-gradient(ellipse 60% 50% at 50% 60%, rgba(108,99,255,0.18) 0%, transparent 70%);
+      filter: blur(32px);
+      pointer-events: none;
+      z-index: 0;
+      animation: mascot-glow-pulse 4s ease-in-out infinite;
+    }
+
+    /* Animated ring / halo behind mascot */
+    .mascot-wrapper::after {
+      content: '';
+      position: absolute;
+      bottom: 10%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 18%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at 50% 50%, rgba(108,99,255,0.10) 0%, transparent 70%);
+      border: 1px solid rgba(108,99,255,0.08);
+      filter: blur(6px);
+      pointer-events: none;
+      z-index: 1;
+      animation: mascot-glow-pulse 4s ease-in-out infinite reverse;
+    }
+
+    .mascot {
+      display: block;
+      position: relative;
+      z-index: 2;
+      width: clamp(480px, 56vw, 820px);
+      max-width: none;
+      height: auto;
+      object-fit: contain;
+      filter:
+        drop-shadow(0 20px 48px rgba(108, 99, 255, 0.22))
+        drop-shadow(0 0 120px rgba(108, 99, 255, 0.12));
+      -webkit-mask-image: linear-gradient(to bottom, black 65%, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0.25) 92%, transparent 100%);
+              mask-image: linear-gradient(to bottom, black 65%, rgba(0,0,0,0.6) 80%, rgba(0,0,0,0.25) 92%, transparent 100%);
+      animation: float 6s ease-in-out infinite;
+      transform-origin: 50% 60%;
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-14px); }
+    }
+
+    @keyframes mascot-glow-pulse {
+      0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+      50%      { opacity: 1;   transform: translateX(-50%) scale(1.12); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mascot { animation: none; }
+      .mascot-wrapper::before,
+      .mascot-wrapper::after { animation: none; }
+    }
+
+    @media (max-width: 900px) {
+      .mascot {
+        width: clamp(260px, 72vw, 420px);
+        margin-inline: auto;
+      }
+    }
+
+    /* =====================================================
+       BUTTONS
+       ===================================================== */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 11px 20px;
+      border-radius: var(--radius-md);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: background-color 0.15s ease, border-color 0.15s ease,
+                  color 0.15s ease, box-shadow 0.2s ease, transform 0.1s ease;
+      text-decoration: none;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .btn:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 3px;
+    }
+
+    .btn--primary {
+      background: linear-gradient(135deg, #6C63FF 0%, #5B52E8 100%);
+      color: #fff;
+      border-color: rgba(108, 99, 255, 0.6);
+      box-shadow: 0 1px 0 rgba(255,255,255,0.08) inset, 0 0 0 transparent;
+    }
+
+    .btn--primary:hover {
+      background: linear-gradient(135deg, #7B73FF 0%, #6C63FF 100%);
+      box-shadow: 0 0 32px rgba(108, 99, 255, 0.5), 0 1px 0 rgba(255,255,255,0.1) inset;
+      transform: translateY(-1px);
+      text-decoration: none;
+    }
+
+    .btn--primary:active { transform: translateY(0); }
+
+    .btn--ghost {
+      background: transparent;
+      color: var(--color-muted);
+      border-color: var(--color-border);
+    }
+
+    .btn--ghost:hover {
+      color: var(--color-text);
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.12);
+      text-decoration: none;
+    }
+
+    /* =====================================================
+       SECTION COMMON
+       ===================================================== */
+    .section {
+      padding-block: var(--space-24);
+    }
+
+    .section-label {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--color-accent);
+      opacity: 0.75;
+      margin-bottom: var(--space-4);
+    }
+
+    .section-label::before {
+      content: '';
+      display: inline-block;
+      width: 20px;
+      height: 1px;
+      background: var(--color-accent);
+      opacity: 0.5;
+    }
+
+    .section-heading {
+      font-family: var(--font-sans);
+      font-size: clamp(1.75rem, 4vw, 2.75rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.025em;
+      color: var(--color-text);
+    }
+
+    .section-sub {
+      font-size: clamp(0.9375rem, 1.3vw, 1.0625rem);
+      color: var(--color-muted);
+      line-height: 1.7;
+    }
+
+    /* Glow divider */
+    .glow-divider {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(108, 99, 255, 0.25), rgba(0, 212, 255, 0.15), transparent);
+      border: none;
+      margin: 0;
+    }
+
+    /* =====================================================
+       INSTALL / TERMINAL SECTION
+       ===================================================== */
+    .install {
+      background-color: var(--color-bg);
+    }
+
+    .install__inner {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-10);
+      align-items: center;
+      max-width: 1040px;
+      margin: 0 auto;
+    }
+
+    @media (max-width: 760px) {
+      .install__inner {
+        grid-template-columns: 1fr;
+        gap: var(--space-10);
+      }
+    }
+
+    .install__copy-block {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    .install__heading {
+      font-family: var(--font-sans);
+      font-size: clamp(1.5rem, 3vw, 2rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--color-text);
+      line-height: 1.2;
+      margin-top: var(--space-3);
+    }
+
+    .install__desc {
+      color: var(--color-muted);
+      font-size: 15px;
+      line-height: 1.7;
+      max-width: 400px;
+    }
+
+    /* Terminal */
+    .terminal {
+      background-color: #0a0e14;
+      border: 1px solid rgba(48, 54, 61, 0.8);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      box-shadow:
+        0 0 0 1px rgba(255,255,255,0.03) inset,
+        0 32px 64px rgba(0, 0, 0, 0.6),
+        0 0 80px rgba(108, 99, 255, 0.05);
+    }
+
+    .terminal__titlebar {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.025);
+      border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+    }
+
+    .terminal__dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .terminal__dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .terminal__dot--red    { background: #FF5F57; }
+    .terminal__dot--yellow { background: #FEBC2E; }
+    .terminal__dot--green  { background: #28C840; }
+
+    .terminal__filename {
+      margin-inline: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--color-muted);
+      opacity: 0.6;
+      transform: translateX(-16px); /* offset to visually center between dots and nothing */
+    }
+
+    .terminal__body {
+      padding: var(--space-5) var(--space-6) var(--space-6);
+    }
+
+    .terminal__body pre {
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 2;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--color-text);
+      margin: 0;
+    }
+
+    .t-comment { color: #4D5766; }
+    .t-prompt   { color: var(--color-amber); user-select: none; }
+    .t-cmd      { color: var(--color-text); }
+    .t-pkg      { color: var(--color-cyan); }
+    .t-flag     { color: var(--color-accent); }
+    .t-out      { color: var(--color-muted); font-size: 12px; }
+
+    .cursor-blink {
+      display: inline-block;
+      width: 8px;
+      height: 1.1em;
+      background: var(--color-text);
+      vertical-align: text-bottom;
+      margin-left: 2px;
+      animation: cursor-blink 1.1s step-end infinite;
+    }
+
+    @keyframes cursor-blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .cursor-blink { animation: none; }
+    }
+
+    .terminal__footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      background: rgba(255,255,255,0.018);
+      border-top: 1px solid rgba(48, 54, 61, 0.4);
+    }
+
+    .terminal__status {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-muted);
+      opacity: 0.5;
+    }
+
+    .terminal__status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-green);
+      box-shadow: 0 0 5px var(--color-green);
+    }
+
+    .copy-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-muted);
+      background: none;
+      border: 1px solid var(--color-border-muted);
+      border-radius: var(--radius-sm);
+      padding: 4px 10px;
+      cursor: pointer;
+      transition: color 0.15s ease, border-color 0.15s ease;
+    }
+
+    .copy-btn:hover {
+      color: var(--color-text);
+      border-color: var(--color-muted);
+    }
+
+    .copy-btn:focus-visible {
+      outline: 2px solid var(--color-accent);
+      outline-offset: 2px;
+    }
+
+    /* =====================================================
+       HOW IT WORKS — staggered scene layout
+       ===================================================== */
+    .how {
+      background: var(--color-bg);
+      /* Header uses the top padding; steps control their own block spacing */
+      padding-block: var(--space-16) 0;
+    }
+
+    .how__header {
+      text-align: center;
+      margin-bottom: var(--space-6);
+    }
+
+    .how__steps {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* =====================================================
+       HOW — Shared copy atom styles
+       ===================================================== */
+    .how__step-num {
+      font-family: var(--font-mono);
+      font-size: clamp(3.5rem, 7vw, 6rem);
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: -0.04em;
+      color: transparent;
+      -webkit-text-stroke: 1px rgba(108, 99, 255, 0.22);
+      user-select: none;
+      margin-bottom: calc(-1 * var(--space-3));
+    }
+
+    .how__step-title {
+      font-family: var(--font-sans);
+      font-size: clamp(1.5rem, 3vw, 2.1rem);
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      color: var(--color-text);
+      line-height: 1.15;
+      text-shadow: 0 2px 20px rgba(0, 0, 0, 0.9);
+    }
+
+    .how__step-title .title-accent { color: var(--color-accent); }
+
+    .how__step-body {
+      font-size: 15px;
+      color: var(--color-muted);
+      line-height: 1.75;
+      text-shadow: 0 1px 12px rgba(0, 0, 0, 0.9);
+    }
+
+    .how__step-body code {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      color: var(--color-cyan);
+      background: rgba(0, 212, 255, 0.07);
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+
+    .how__step-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-accent);
+      background: rgba(108, 99, 255, 0.08);
+      border: 1px solid rgba(108, 99, 255, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 3px 10px;
+      width: fit-content;
+    }
+
+    .how__step-copy {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+    }
+
+    /* =====================================================
+       STEP 01 — VAULT
+       Image absolutely bleeds off the RIGHT edge.
+       Text card anchored left inside a max-width container.
+       ===================================================== */
+    .how__step--vault {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-8);
+      align-items: center;
+      min-height: clamp(400px, 42vw, 600px);
+      position: relative;
+      padding-inline: clamp(1.5rem, 8vw, 15vw);
+      padding-block: var(--space-12);
+      /* Cap so images don't go enormous on 4K */
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    /* Text: visually left (order 1 — image is first in DOM) */
+    .how__step--vault__wrap {
+      order: 1;
+      padding: var(--space-16) var(--space-6) var(--space-16) clamp(1.5rem, 5vw, 4rem);
+      position: relative;
+      z-index: 2;
+    }
+
+    .how__step--vault__card {
+      max-width: 100%;
+      background: linear-gradient(135deg,
+        rgba(13,17,23,0.92) 0%,
+        rgba(22,27,34,0.82) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(108,99,255,0.18);
+      border-radius: 16px;
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+    }
+
+    /* Image: visually right (order 2) */
+    .how__step--vault__img {
+      order: 2;
+      display: block;
+      width: 100%;
+      height: auto;
+      mix-blend-mode: screen;
+      filter: drop-shadow(0 20px 56px rgba(108,99,255,0.28));
+      position: relative;
+      z-index: 1;
+      /* Soft radial fade — NO rectangular box */
+      -webkit-mask-image: radial-gradient(ellipse 90% 85% at 55% 50%, black 35%, transparent 75%);
+              mask-image: radial-gradient(ellipse 90% 85% at 55% 50%, black 35%, transparent 75%);
+      transition: transform 0.6s cubic-bezier(0.16,1,0.3,1), filter 0.4s ease;
+    }
+
+    .how__step--vault:hover .how__step--vault__img {
+      transform: scale(1.03) translateY(-4px);
+      filter: drop-shadow(0 28px 72px rgba(108,99,255,0.42));
+    }
+
+    /* =====================================================
+       STEP 02 — TIMELINE
+       Full-width cinematic stage: image centered large,
+       text centered below. Tech grid dots in bg.
+       ===================================================== */
+    .how__step--timeline {
+      position: relative;
+      overflow: hidden;
+      border-top: 1px solid var(--color-border-muted);
+    }
+
+    /* Cyan tech-grid overlay, fades at edges */
+    .how__step--timeline::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.045) 1px, transparent 1px);
+      background-size: 44px 44px;
+      pointer-events: none;
+      -webkit-mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 0%, transparent 100%);
+              mask-image: radial-gradient(ellipse 75% 65% at 50% 40%, black 0%, transparent 100%);
+    }
+
+    .how__step--timeline__inner {
+      position: relative;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 3fr 2fr;
+      align-items: start;
+      padding-inline: clamp(1.5rem, 6vw, 12vw);
+      padding-block: var(--space-12);
+      gap: 0;
+      /* Cap so images don't go enormous on 4K */
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .how__step--timeline__img-wrap {
+      width: 100%;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Bottom-fade so the image dissolves into the section bg */
+    .how__step--timeline__img-wrap::after {
+      content: '';
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 30%;
+      background: linear-gradient(to top, var(--color-bg), transparent);
+      pointer-events: none;
+    }
+
+    .how__step--timeline__img {
+      display: block;
+      width: 100%;
+      height: auto;
+      mix-blend-mode: screen;
+      filter: drop-shadow(0 12px 40px rgba(0,212,255,0.22));
+      /* Soft radial fade — image floats naturally; single layer, no composite */
+      -webkit-mask-image: radial-gradient(ellipse 85% 80% at 50% 48%, black 35%, transparent 72%);
+              mask-image: radial-gradient(ellipse 85% 80% at 50% 48%, black 35%, transparent 72%);
+      /* Flip bird to face right (toward the text card) */
+      transform: scaleX(-1);
+      transition: transform 0.6s cubic-bezier(0.16,1,0.3,1), filter 0.4s ease;
+    }
+
+    .how__step--timeline:hover .how__step--timeline__img {
+      transform: scaleX(-1) scale(1.02) translateY(-4px);
+      filter: drop-shadow(0 20px 56px rgba(0,212,255,0.38));
+    }
+
+    .how__step--timeline__copy {
+      position: relative;
+      z-index: 2;
+      margin-left: -100px;
+      margin-top: var(--space-6);
+      background: linear-gradient(135deg, rgba(13,17,23,0.92) 0%, rgba(22,27,34,0.82) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0,212,255,0.18);
+      border-radius: 16px;
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+      text-align: left;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--space-4);
+    }
+
+    .how__step--timeline__copy .how__step-num {
+      -webkit-text-stroke: 1px rgba(0,212,255,0.22);
+    }
+
+    .how__step--timeline__copy .how__step-tag {
+      color: var(--color-cyan);
+      background: rgba(0,212,255,0.07);
+      border-color: rgba(0,212,255,0.2);
+    }
+
+    .how__step--timeline__copy .how__step-title .title-accent {
+      color: var(--color-cyan);
+    }
+
+    /* =====================================================
+       STEP 03 — COMMIT
+       Image absolutely bleeds off the LEFT edge.
+       Text card anchored right inside a max-width container.
+       ===================================================== */
+    .how__step--commit {
+      overflow: hidden;
+      border-top: 1px solid var(--color-border-muted);
+      border-bottom: 1px solid var(--color-border-muted);
+      min-height: clamp(480px, 52vw, 680px);
+      position: relative;
+    }
+
+    /* Rich purple/cyan glow behind the bird image on the right */
+    .how__step--commit::before {
+      content: '';
+      position: absolute;
+      right: 0; top: 0; bottom: 0;
+      width: 60%;
+      background:
+        radial-gradient(ellipse 70% 60% at 80% 50%, rgba(108,99,255,0.14) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 45% at 90% 40%, rgba(0,212,255,0.10) 0%, transparent 55%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .how__step--commit__inner {
+      display: grid;
+      grid-template-columns: 1fr 1.4fr;
+      align-items: center;
+      max-width: 1040px;
+      margin: 0 auto;
+      min-height: inherit;
+    }
+
+    /* Ambient cyan glow from right (image is now on right) */
+    .how__step--commit::after {
+      content: '';
+      position: absolute;
+      right: 0; top: 0; bottom: 0;
+      width: 55%;
+      background: radial-gradient(ellipse 80% 80% at 90% 50%, rgba(0,212,255,0.06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Image: ORDER 2 = visually RIGHT, bleeds off right edge */
+    .how__step--commit__img {
+      order: 2;
+      display: block;
+      width: calc(100% + max(var(--space-6), calc((100vw - 1040px) / 2)) + clamp(120px, 20vw, 300px));
+      min-width: 700px;
+      margin-right: calc(-1 * (max(var(--space-6), calc((100vw - 1040px) / 2)) + clamp(120px, 20vw, 300px)));
+      margin-left: 0;
+      height: auto;
+      mix-blend-mode: screen;
+      filter: drop-shadow(0 20px 56px rgba(0,212,255,0.26)) brightness(1.25);
+      /* Smooth dissolve: left, right, bottom — top stays fully visible */
+      -webkit-mask-image:
+        linear-gradient(to right, transparent 0%, rgba(0,0,0,0.15) 5%, rgba(0,0,0,0.5) 12%, black 25%, black 75%, rgba(0,0,0,0.5) 88%, rgba(0,0,0,0.15) 95%, transparent 100%),
+        linear-gradient(to bottom, black 0%, black 55%, rgba(0,0,0,0.7) 72%, rgba(0,0,0,0.35) 85%, rgba(0,0,0,0.1) 94%, transparent 100%);
+      -webkit-mask-composite: source-in;
+              mask-image:
+        linear-gradient(to right, transparent 0%, rgba(0,0,0,0.15) 5%, rgba(0,0,0,0.5) 12%, black 25%, black 75%, rgba(0,0,0,0.5) 88%, rgba(0,0,0,0.15) 95%, transparent 100%),
+        linear-gradient(to bottom, black 0%, black 55%, rgba(0,0,0,0.7) 72%, rgba(0,0,0,0.35) 85%, rgba(0,0,0,0.1) 94%, transparent 100%);
+              mask-composite: intersect;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Text: ORDER 1 = visually LEFT */
+    .how__step--commit__wrap {
+      order: 1;
+      padding: var(--space-16) var(--space-6) var(--space-16) clamp(1.5rem, 5vw, 4rem);
+      position: relative;
+      z-index: 2;
+    }
+
+    .how__step--commit__card {
+      max-width: 460px;
+      background: linear-gradient(135deg,
+        rgba(13,17,23,0.92) 0%,
+        rgba(22,27,34,0.82) 100%);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(0,212,255,0.16);
+      border-radius: 16px;
+      padding: clamp(1.5rem, 3vw, 2.5rem);
+    }
+
+    .how__step--commit__card .how__step-num {
+      -webkit-text-stroke: 1px rgba(0,212,255,0.22);
+    }
+
+    .how__step--commit__card .how__step-tag {
+      color: var(--color-cyan);
+      background: rgba(0,212,255,0.07);
+      border-color: rgba(0,212,255,0.18);
+    }
+
+    .how__step--commit__card .how__step-title .title-accent {
+      color: var(--color-cyan);
+    }
+
+    /* =====================================================
+       HOW — MOBILE (≤768px)
+       ===================================================== */
+    @media (max-width: 768px) {
+      .how__step--vault,
+      .how__step--commit {
+        min-height: 0;
+        padding-top: var(--space-10);
+        padding-bottom: var(--space-10);
+      }
+
+      .how__step--vault,
+      .how__step--commit__inner {
+        grid-template-columns: 1fr;
+      }
+
+      /* Vault: image on top, text below on mobile */
+      .how__step--vault__img {
+        order: 1;
+        width: 72%;
+        max-width: 280px;
+        min-width: 0;
+        margin: 0 auto var(--space-4);
+        -webkit-mask-image: none;
+                mask-image: none;
+      }
+      .how__step--vault__wrap { order: 2; padding: 0 var(--space-4) var(--space-8); }
+
+      .how__step--commit__img {
+        width: 72%;
+        max-width: 280px;
+        min-width: 0;
+        margin: 0 auto var(--space-4);
+        -webkit-mask-image: none;
+                mask-image: none;
+      }
+      .how__step--commit__wrap { padding: 0 var(--space-4) var(--space-8); }
+
+      .how__step--timeline__inner { grid-template-columns: 1fr; padding-inline: var(--space-4); }
+      .how__step--timeline__copy { margin-left: 0; }
+
+      .how__step--vault__card,
+      .how__step--commit__card { max-width: 100%; }
+
+      .how__step--vault::after,
+      .how__step--commit::before,
+      .how__step--commit::after { display: none; }
+
+      .how__step--timeline { padding-block: var(--space-10); }
+    }
+
+    /* =====================================================
+       HOW CARD TILT (applied to .how__step-media as tilt target)
+       Also applied to .how__card via .tilt-card
+       ===================================================== */
+    .tilt-card {
+      transform-style: preserve-3d;
+      transition: transform 0.08s linear, box-shadow 0.2s ease;
+      will-change: transform;
+    }
+
+    .tilt-card.is-resetting {
+      transition: transform 0.6s cubic-bezier(0.16,1,0.3,1), box-shadow 0.4s ease;
+    }
+
+    .tilt-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: radial-gradient(
+        circle at calc(var(--mx, 50%) * 1%) calc(var(--my, 50%) * 1%),
+        rgba(255,255,255,0.07) 0%,
+        rgba(108,99,255,0.03) 30%,
+        transparent 65%
+      );
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+      z-index: 2;
+    }
+
+    .tilt-card:hover::before { opacity: 1; }
+
+    /* =====================================================
+       PROVIDERS — 4-card grid
+       ===================================================== */
+    .providers {
+      background-color: var(--color-bg-elevated);
+    }
+
+    .providers__header {
+      text-align: center;
+      margin-bottom: var(--space-12);
+    }
+
+    /* Provider cards grid */
+    .providers__grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: var(--space-4);
+      margin-top: var(--space-10);
+    }
+
+    @media (max-width: 900px) {
+      .providers__grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 480px) {
+      .providers__grid { grid-template-columns: 1fr; }
+    }
+
+    .provider-card {
+      background: var(--color-bg);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-4);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+      cursor: default;
+    }
+
+    .provider-card:hover {
+      border-color: rgba(108, 99, 255, 0.35);
+      box-shadow: 0 8px 32px rgba(108, 99, 255, 0.08);
+      transform: translateY(-2px);
+    }
+
+    .provider-card__head {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .provider-card__icon {
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .pc--claude  .provider-card__icon { background: rgba(240,136,62,0.14); }
+    .pc--gemini  .provider-card__icon { background: rgba(88,166,255,0.12); }
+    .pc--copilot .provider-card__icon { background: rgba(46,160,67,0.12); }
+    .pc--codex   .provider-card__icon { background: rgba(168,85,247,0.12); }
+
+    .provider-card__name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--color-text);
+      line-height: 1.2;
+    }
+
+    .provider-card__vendor {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-muted);
+      line-height: 1;
+    }
+
+    .provider-card__files {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-1);
+      flex: 1;
+    }
+
+    .provider-card__files li {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-muted);
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+    }
+
+    .provider-card__files li::before {
+      content: '';
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: currentColor;
+      opacity: 0.45;
+      flex-shrink: 0;
+    }
+
+    .provider-card__dir {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-accent);
+      opacity: 0.7;
+      margin-top: auto;
+      padding-top: var(--space-3);
+      border-top: 1px solid var(--color-border-muted);
+    }
+
+    .providers__note {
+      text-align: center;
+      margin-top: var(--space-8);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--color-muted);
+      opacity: 0.5;
+    }
+
+    /* =====================================================
+       STORAGE MODES
+       ===================================================== */
+    .storage {
+      background: var(--color-bg);
+    }
+
+    .storage__header {
+      text-align: center;
+      margin-bottom: var(--space-12);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: var(--space-4);
+    }
+
+    .storage__grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: var(--space-4);
+      max-width: 860px;
+      margin-inline: auto;
+    }
+
+    @media (max-width: 640px) {
+      .storage__grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .storage-card {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-6);
+      background: var(--color-bg-elevated);
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .storage-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(108,99,255,0.4), transparent);
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+
+    .storage-card:hover {
+      border-color: rgba(108, 99, 255, 0.3);
+      box-shadow: 0 8px 32px rgba(108, 99, 255, 0.08);
+    }
+
+    .storage-card:hover::before { opacity: 1; }
+
+    .storage-card__badge {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--color-accent);
+      background: rgba(108, 99, 255, 0.1);
+      border: 1px solid rgba(108, 99, 255, 0.2);
+      border-radius: var(--radius-sm);
+      padding: 3px 10px;
+      display: inline-block;
+      margin-bottom: var(--space-4);
+      letter-spacing: 0.04em;
+    }
+
+    .storage-card__title {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--color-text);
+      margin-bottom: var(--space-2);
+    }
+
+    .storage-card__body {
+      font-size: 14px;
+      color: var(--color-muted);
+      line-height: 1.7;
+    }
+
+    /* =====================================================
+       FOOTER
+       ===================================================== */
+    .footer {
+      border-top: 1px solid var(--color-border-muted);
+      padding-block: var(--space-10);
+      background: var(--color-bg);
+    }
+
+    .footer__inner {
+      max-width: var(--container-max);
+      margin-inline: auto;
+      padding-inline: var(--space-6);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-6);
+      flex-wrap: wrap;
+    }
+
+    .footer__brand {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+    }
+
+    .footer__brand img {
+      width: 22px;
+      height: 22px;
+      object-fit: contain;
+      opacity: 0.6;
+    }
+
+    .footer__brand-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--color-muted);
+      letter-spacing: -0.02em;
+    }
+
+    .footer__brand-name span { color: var(--color-accent); }
+
+    .footer__copy {
+      font-size: 12px;
+      color: var(--color-muted);
+      opacity: 0.5;
+    }
+
+    .footer__links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-5);
+      align-items: center;
+    }
+
+    .footer__links a {
+      font-size: 13px;
+      color: var(--color-muted);
+      transition: color 0.15s ease;
+    }
+
+    .footer__links a:hover {
+      color: var(--color-text);
+      text-decoration: none;
+    }
+
+    /* =====================================================
+       SCROLL REVEAL
+       ===================================================== */
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      transition: opacity 0.65s cubic-bezier(0.16,1,0.3,1),
+                  transform 0.65s cubic-bezier(0.16,1,0.3,1);
+    }
+
+    .reveal.in-view {
+      opacity: 1;
+      transform: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal {
+        opacity: 1;
+        transform: none;
+        transition: none;
+      }
+    }
+
+    /* =====================================================
+       SKIP TO CONTENT
+       ===================================================== */
+    .skip-to-content {
+      position: absolute;
+      top: -100%;
+      left: var(--space-6);
+      z-index: 9999;
+      padding: var(--space-3) var(--space-6);
+      background: var(--color-accent);
+      color: #fff;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 0 0 var(--radius-md) var(--radius-md);
+      text-decoration: none;
+      transition: top 0.15s ease;
+    }
+
+    .skip-to-content:focus {
+      top: 0;
+      outline: 2px solid #fff;
+      outline-offset: 2px;
+    }
+
+  </style>
+</head>
+<body>
+
+  <!-- Skip to main content (keyboard / AT users) -->
+  <a href="#main-content" class="skip-to-content">Skip to main content</a>
+
+  <!-- Film grain canvas -->
+  <canvas id="grain-canvas" aria-hidden="true"></canvas>
+
+  <!-- ======================================================
+       NAV
+       ====================================================== -->
+  <header role="banner">
+    <nav class="nav" aria-label="Site navigation">
+      <div class="nav__inner">
+        <a href="/" class="nav__logo" aria-label="amensiai home">
+          <img
+            src="images/amensiai_icon.png"
+            alt=""
+            width="26"
+            height="26"
+            onerror="this.style.display='none'"
+><span class="nav__wordmark">amen<span>siai</span></span>
+        </a>
+        <ul class="nav__links" role="list">
+          <li><a href="#how-it-works">How it works</a></li>
+          <li><a href="#providers">Providers</a></li>
+          <li><a href="#storage">Storage</a></li>
+          <li>
+            <a
+              href="https://github.com/thepixelabs/amensiai"
+              class="nav__cta"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View on GitHub (opens in new tab)"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                <path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>
+              </svg>
+              GitHub
+            </a>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content">
+
+    <!-- ======================================================
+         HERO
+         ====================================================== -->
+    <section class="hero scanlines" aria-labelledby="hero-headline">
+
+      <!-- Aurora background -->
+      <div class="aurora-bg" aria-hidden="true">
+        <div class="aurora-bg__orb aurora-bg__orb--1"></div>
+        <div class="aurora-bg__orb aurora-bg__orb--2"></div>
+        <div class="aurora-bg__orb aurora-bg__orb--3"></div>
+      </div>
+
+      <div class="hero__inner">
+
+        <!-- Left: content -->
+        <div class="hero__content">
+
+          <div class="hero__eyebrow" aria-label="v0.1 early access">
+            v0.1 &nbsp;early access
+          </div>
+
+          <h1 class="hero__headline" id="hero-headline">
+            <span class="line-dim">New machine.</span><br>
+            <span class="line-accent">Same AI.</span>
+          </h1>
+
+          <p class="hero__tagline">
+            <span class="tag-accent">$</span> git your ai setup
+          </p>
+
+          <p class="hero__subhead">
+            The config you spent months tuning —
+            <strong>Claude Code</strong>, <strong>Gemini CLI</strong>,
+            <strong>Copilot</strong>, <strong>Codex CLI</strong>.
+            Backed up in one command. Versioned, encrypted,
+            and ready to restore anywhere.
+          </p>
+
+          <div class="hero__actions">
+            <a
+              href="#install"
+              class="btn btn--primary"
+              aria-label="Get started — jump to install"
+            >
+              <!-- Terminal icon -->
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <polyline points="4 17 10 11 4 5"/>
+                <line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              Get started
+            </a>
+            <a
+              href="https://github.com/thepixelabs/amensiai"
+              class="btn btn--ghost"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="View source on GitHub (opens in new tab)"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                <path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/>
+              </svg>
+              View source
+            </a>
+          </div>
+
+        </div><!-- /hero__content -->
+
+        <!-- Right: bird — oversized, bleeds off edge -->
+        <div class="hero__bird-col" aria-hidden="true">
+          <div class="mascot-wrapper">
+            <img
+              class="mascot"
+              src="images/amensiai_hero.png"
+              alt=""
+              width="820"
+              height="820"
+              loading="eager"
+              decoding="async"
+            />
+          </div>
+        </div>
+
+      </div><!-- /hero__inner -->
+    </section>
+
+    <hr class="glow-divider" aria-hidden="true">
+
+    <!-- ======================================================
+         INSTALL
+         ====================================================== -->
+    <section class="install section" id="install" aria-labelledby="install-heading">
+      <div class="container">
+        <div class="install__inner">
+
+          <!-- Copy side -->
+          <div class="install__copy-block reveal">
+            <span class="section-label">Quick start</span>
+            <h2 class="install__heading" id="install-heading">
+              Up and running<br>in seconds.
+            </h2>
+            <p class="install__desc">
+              Install via Homebrew. One tap to back up every AI tool config on your
+              machine. One more to restore it on your next machine.
+            </p>
+            <div style="display:flex; gap: var(--space-3); flex-wrap:wrap; margin-top: var(--space-2);">
+              <a href="https://github.com/thepixelabs/amensiai/releases" class="btn btn--ghost" target="_blank" rel="noopener noreferrer" style="font-size:13px; padding:8px 14px;">
+                View releases
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+              </a>
+            </div>
+          </div>
+
+          <!-- Terminal side -->
+          <div class="reveal" style="transition-delay: 0.1s;">
+            <div class="terminal" role="region" aria-label="Installation commands">
+
+              <div class="terminal__titlebar" aria-hidden="true">
+                <div class="terminal__dots">
+                  <span class="terminal__dot terminal__dot--red"></span>
+                  <span class="terminal__dot terminal__dot--yellow"></span>
+                  <span class="terminal__dot terminal__dot--green"></span>
+                </div>
+                <span class="terminal__filename">zsh</span>
+              </div>
+
+              <div class="terminal__body">
+                <pre><code><span class="t-comment"># Install via Homebrew</span>
+<span class="t-prompt">~ $ </span><span class="t-cmd">brew install <span class="t-pkg">thepixelabs/tap/amensiai</span></span>
+
+<span class="t-comment"># Back up all AI tool configs</span>
+<span class="t-prompt">~ $ </span><span class="t-cmd">amensiai <span class="t-flag">backup</span></span>
+<span class="t-out">  ✓ claude-code      ~/.claude/</span>
+<span class="t-out">  ✓ gemini-cli       ~/.gemini/</span>
+<span class="t-out">  ✓ github-copilot   ~/.config/github-copilot/</span>
+<span class="t-out">  ✓ codex-cli        ~/.codex/</span>
+<span class="t-out">  snapshot → v2026.04.16-083412.age</span>
+
+<span class="t-comment"># Restore on any machine</span>
+<span class="t-prompt">~ $ </span><span class="t-cmd">amensiai <span class="t-flag">restore</span></span><span class="cursor-blink" aria-hidden="true"></span></code></pre>
+              </div>
+
+              <div class="terminal__footer" aria-hidden="true">
+                <div class="terminal__status">
+                  <span class="terminal__status-dot"></span>
+                  amensiai v0.1 ready
+                </div>
+                <button
+                  class="copy-btn"
+                  aria-label="Copy install command to clipboard"
+                  onclick="copyInstall(this)"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                  </svg>
+                  <span class="copy-btn__text">Copy brew command</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <hr class="glow-divider" aria-hidden="true">
+
+    <!-- ======================================================
+         HOW IT WORKS
+         ====================================================== -->
+    <section class="how section" id="how-it-works" aria-labelledby="how-heading">
+      <div class="container">
+        <div class="how__header reveal">
+          <span class="section-label" style="justify-content:center;">How it works</span>
+          <h2 class="section-heading" id="how-heading" style="margin-top: var(--space-3);">
+            Back up. Restore. Own it.
+          </h2>
+        </div>
+      </div>
+
+      <ol class="how__steps">
+
+          <!-- ── Step 01: Vault — text left, image bleeds right ── -->
+          <li class="how__step--vault">
+            <img
+              class="how__step--vault__img reveal"
+              src="images/amensiai_vault.png"
+              alt="Magpie perched on an open vault door — sealed AI configurations"
+              width="580"
+              height="580"
+              loading="lazy"
+              decoding="async"
+              style="transition-delay:0.05s;"
+            />
+            <div class="how__step--vault__wrap reveal" style="transition-delay:0.18s;">
+              <div class="how__step--vault__card how__step-copy">
+                <div class="how__step-num" aria-hidden="true">01</div>
+                <span class="how__step-tag">amensiai backup</span>
+                <h3 class="how__step-title">
+                  Sealed in a <span class="title-accent">vault.</span>
+                </h3>
+                <p class="how__step-body">
+                  One command scans every AI assistant on your machine, redacts
+                  secrets with embedded gitleaks, and writes an encrypted
+                  <code>.age</code> snapshot. Nothing sensitive leaves unguarded.
+                </p>
+              </div>
+            </div>
+          </li>
+
+          <!-- ── Step 02: Timeline — full-width stage, image then text ── -->
+          <li class="how__step--timeline">
+            <div class="how__step--timeline__inner">
+              <div class="how__step--timeline__img-wrap reveal">
+                <img
+                  class="how__step--timeline__img"
+                  src="images/amensiai_timeline.png"
+                  alt="Magpie perched on a timeline bar — point-in-time snapshot history"
+                  width="820"
+                  height="480"
+                  loading="lazy"
+                  decoding="async"
+                />
+              </div>
+              <div class="how__step--timeline__copy reveal" style="transition-delay:0.12s;">
+                <div class="how__step-num" aria-hidden="true">02</div>
+                <span class="how__step-tag">amensiai restore --pick</span>
+                <h3 class="how__step-title">
+                  Any point in <span class="title-accent">time.</span>
+                </h3>
+                <p class="how__step-body">
+                  Every backup is a timestamped snapshot on a visible timeline.
+                  Pick any point in history, preview the diff, and restore with
+                  explicit confirmation — no surprises, no silent overwrites.
+                </p>
+              </div>
+            </div>
+          </li>
+
+          <!-- ── Step 03: Commit — image bleeds left, text card right ── -->
+          <li class="how__step--commit">
+            <div class="how__step--commit__inner">
+              <img
+                class="how__step--commit__img reveal"
+                src="images/amensiai_commit.png"
+                alt="Magpie sitting on a git branch — git-native versioning of AI configurations"
+                width="580"
+                height="580"
+                loading="lazy"
+                decoding="async"
+                style="transition-delay:0.05s;"
+              />
+              <div class="how__step--commit__wrap reveal" style="transition-delay:0.18s;">
+                <div class="how__step--commit__card how__step-copy">
+                  <div class="how__step-num" aria-hidden="true">03</div>
+                  <span class="how__step-tag">git push origin main</span>
+                  <h3 class="how__step-title">
+                    <span class="title-accent">Git-native</span> workflow.
+                  </h3>
+                  <p class="how__step-body">
+                    Snapshots live in a private git repo. Each backup is a
+                    structured commit. Use your existing GitHub or GitLab —
+                    no new services, no new credentials to manage.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </li>
+
+      </ol>
+
+    </section>
+
+    <hr class="glow-divider" aria-hidden="true">
+
+    <!-- ======================================================
+         PROVIDERS
+         ====================================================== -->
+    <section class="providers section" id="providers" aria-labelledby="providers-heading">
+      <div class="container">
+        <div class="providers__header reveal">
+          <span class="section-label" style="justify-content:center;">What gets backed up</span>
+          <h2 class="section-heading" id="providers-heading" style="margin-top: var(--space-3);">
+            Exactly what gets backed.
+          </h2>
+          <p class="section-sub" style="margin-top:var(--space-3); max-width:520px; margin-inline:auto;">
+            Settings, instructions, agents — the files that took time to tune.
+            Credentials, logs, and session data are never touched.
+          </p>
+        </div>
+
+        <!-- 4-card provider grid -->
+        <div class="providers__grid" role="list" aria-label="Supported AI tools">
+
+        <!-- Claude Code -->
+        <div class="provider-card pc--claude reveal" role="listitem">
+          <div class="provider-card__head">
+            <div class="provider-card__icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(240,136,62,0.85)"><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div>
+              <div class="provider-card__name">Claude Code</div>
+              <div class="provider-card__vendor">Anthropic</div>
+            </div>
+          </div>
+          <ul class="provider-card__files">
+            <li>CLAUDE.md</li>
+            <li>settings.json</li>
+            <li>settings.local.json</li>
+            <li>todos/, ide/</li>
+          </ul>
+          <div class="provider-card__dir">~/.claude/</div>
+        </div>
+
+        <!-- Gemini CLI -->
+        <div class="provider-card pc--gemini reveal" role="listitem" style="transition-delay:0.07s;">
+          <div class="provider-card__head">
+            <div class="provider-card__icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(88,166,255,0.85)"><polygon points="12,2 22,20 2,20"/></svg>
+            </div>
+            <div>
+              <div class="provider-card__name">Gemini CLI</div>
+              <div class="provider-card__vendor">Google</div>
+            </div>
+          </div>
+          <ul class="provider-card__files">
+            <li>GEMINI.md</li>
+            <li>settings.json</li>
+            <li>themes/</li>
+          </ul>
+          <div class="provider-card__dir">~/.gemini/</div>
+        </div>
+
+        <!-- GitHub Copilot -->
+        <div class="provider-card pc--copilot reveal" role="listitem" style="transition-delay:0.14s;">
+          <div class="provider-card__head">
+            <div class="provider-card__icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(46,160,67,0.85)"><path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg>
+            </div>
+            <div>
+              <div class="provider-card__name">GitHub Copilot</div>
+              <div class="provider-card__vendor">GitHub</div>
+            </div>
+          </div>
+          <ul class="provider-card__files">
+            <li>*.json (hosts, settings…)</li>
+          </ul>
+          <div class="provider-card__dir">~/.config/github-copilot/</div>
+        </div>
+
+        <!-- Codex CLI -->
+        <div class="provider-card pc--codex reveal" role="listitem" style="transition-delay:0.21s;">
+          <div class="provider-card__head">
+            <div class="provider-card__icon" aria-hidden="true">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(168,85,247,0.85)"><rect x="3" y="3" width="18" height="18" rx="3"/></svg>
+            </div>
+            <div>
+              <div class="provider-card__name">Codex CLI</div>
+              <div class="provider-card__vendor">OpenAI</div>
+            </div>
+          </div>
+          <ul class="provider-card__files">
+            <li>config.json</li>
+            <li>instructions.md</li>
+            <li>themes/</li>
+          </ul>
+          <div class="provider-card__dir">~/.codex/</div>
+        </div>
+
+        </div><!-- /providers__grid -->
+
+        <p class="providers__note reveal" style="margin-top: var(--space-8);">
+          secrets and auth tokens are never backed up — gitleaks scans every snapshot before it writes.
+          <a href="https://github.com/thepixelabs/amensiai/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener noreferrer" style="color:var(--color-accent);opacity:0.7;margin-left:var(--space-3);">Add a provider →</a>
+        </p>
+
+      </div><!-- /container -->
+    </section>
+
+    <hr class="glow-divider" aria-hidden="true">
+
+    <!-- ======================================================
+         STORAGE MODES
+         ====================================================== -->
+    <section class="storage section" id="storage" aria-labelledby="storage-heading">
+      <div class="container">
+
+        <div class="storage__header reveal">
+          <span class="section-label">Storage</span>
+          <h2 class="section-heading" id="storage-heading">
+            Store configs your way.
+          </h2>
+          <p class="section-sub" style="max-width:480px;">
+            Pick the mode that fits your workflow. Switch any time.
+          </p>
+        </div>
+
+        <ul class="storage__grid" role="list">
+
+          <li class="storage-card reveal" style="transition-delay:0.05s;">
+            <span class="storage-card__badge">local</span>
+            <h3 class="storage-card__title">Machine only</h3>
+            <p class="storage-card__body">
+              Snapshots stay on your machine. No network, no remote, no
+              dependencies. Simple and fast.
+            </p>
+          </li>
+
+          <li class="storage-card reveal" style="transition-delay:0.12s;">
+            <span class="storage-card__badge">git-local</span>
+            <h3 class="storage-card__title">Local git repo</h3>
+            <p class="storage-card__body">
+              Full git history on your machine. No remote needed.
+              Roll back to any previous state instantly.
+            </p>
+          </li>
+
+          <li class="storage-card reveal" style="transition-delay:0.19s;">
+            <span class="storage-card__badge">git-remote</span>
+            <h3 class="storage-card__title">Remote git</h3>
+            <p class="storage-card__body">
+              Push to GitHub or GitLab automatically.
+              Access your configs from any machine, anywhere.
+            </p>
+          </li>
+
+        </ul>
+
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ======================================================
+       FOOTER
+       ====================================================== -->
+  <footer class="footer" role="contentinfo">
+    <div class="footer__inner">
+
+      <div class="footer__brand">
+        <img
+          src="images/amensiai_icon.png"
+          alt=""
+          aria-hidden="true"
+          width="22"
+          height="22"
+          onerror="this.style.display='none'"
+        >
+        <span class="footer__brand-name">amen<span>siai</span></span>
+        <span class="footer__copy">&copy; 2026 The Pixel Labs</span>
+      </div>
+
+      <nav aria-label="Footer navigation">
+        <ul class="footer__links" role="list">
+          <li>
+            <a href="https://github.com/thepixelabs/amensiai" target="_blank" rel="noopener noreferrer">
+              GitHub
+            </a>
+          </li>
+          <li>
+            <a href="https://github.com/thepixelabs/amensiai/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
+              License (MIT)
+            </a>
+          </li>
+          <li>
+            <a href="https://amensiai.pixelabs.net">
+              amensiai.pixelabs.net
+            </a>
+          </li>
+        </ul>
+      </nav>
+
+    </div>
+  </footer>
+
+  <!-- ======================================================
+       SCRIPTS
+       ====================================================== -->
+  <script>
+    // -------------------------------------------------------
+    // Film grain canvas
+    // -------------------------------------------------------
+    (function () {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      var canvas = document.getElementById('grain-canvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var W = 128, H = 128;
+      canvas.width = W;
+      canvas.height = H;
+      var imageData = ctx.createImageData(W, H);
+      var data = imageData.data;
+      var lastTime = 0, INTERVAL = 1000 / 24, rafId;
+
+      function tick(now) {
+        if (now - lastTime >= INTERVAL) {
+          lastTime = now;
+          for (var i = 0; i < data.length; i += 4) {
+            var v = (Math.random() * 255) | 0;
+            data[i] = v; data[i + 1] = v; data[i + 2] = v; data[i + 3] = 255;
+          }
+          ctx.putImageData(imageData, 0, 0);
+        }
+        rafId = requestAnimationFrame(tick);
+      }
+
+      rafId = requestAnimationFrame(tick);
+
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+          cancelAnimationFrame(rafId);
+        } else {
+          lastTime = 0;
+          rafId = requestAnimationFrame(tick);
+        }
+      });
+    }());
+
+    // -------------------------------------------------------
+    // Copy install command
+    // -------------------------------------------------------
+    function copyInstall(btn) {
+      var cmd = 'brew install thepixelabs/tap/amensiai';
+      var textSpan = btn.querySelector('.copy-btn__text');
+      var original = textSpan ? textSpan.textContent : 'copy install';
+
+      navigator.clipboard.writeText(cmd).then(function () {
+        if (textSpan) textSpan.textContent = 'copied!';
+        btn.setAttribute('aria-label', 'Copied to clipboard');
+        setTimeout(function () {
+          if (textSpan) textSpan.textContent = original;
+          btn.setAttribute('aria-label', 'Copy install command to clipboard');
+        }, 2200);
+      }).catch(function () {
+        var ta = document.createElement('textarea');
+        ta.value = cmd;
+        ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        if (textSpan) textSpan.textContent = 'copied!';
+        setTimeout(function () { if (textSpan) textSpan.textContent = original; }, 2200);
+      });
+    }
+
+    // -------------------------------------------------------
+    // Scroll-reveal (IntersectionObserver)
+    // -------------------------------------------------------
+    (function () {
+      var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (prefersReduced) return;
+
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+      document.querySelectorAll('.reveal').forEach(function (el) {
+        io.observe(el);
+      });
+    }());
+
+    // -------------------------------------------------------
+    // 3D card tilt on how__step-media
+    // -------------------------------------------------------
+    (function () {
+      if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (window.matchMedia('(hover: none)').matches) return;
+
+      var TILT = 8, PERSP = 900;
+
+      document.querySelectorAll('.how__step--vault__img, .how__step--timeline__img-wrap, .how__step--commit__img').forEach(function (card) {
+        card.classList.add('tilt-card');
+        if (getComputedStyle(card).position === 'static') card.style.position = 'relative';
+
+        card.addEventListener('mousemove', function (e) {
+          card.classList.remove('is-resetting');
+          var r = card.getBoundingClientRect();
+          var nx = ((e.clientX - r.left) / r.width) * 2 - 1;
+          var ny = ((e.clientY - r.top) / r.height) * 2 - 1;
+          card.style.transform = 'perspective(' + PERSP + 'px) rotateX(' + (-ny * TILT).toFixed(2) + 'deg) rotateY(' + (nx * TILT).toFixed(2) + 'deg) translateZ(6px)';
+          card.style.setProperty('--mx', (((e.clientX - r.left) / r.width) * 100).toFixed(1));
+          card.style.setProperty('--my', (((e.clientY - r.top) / r.height) * 100).toFixed(1));
+        });
+
+        card.addEventListener('mouseleave', function () {
+          card.classList.add('is-resetting');
+          card.style.transform = '';
+          card.style.setProperty('--mx', '50');
+          card.style.setProperty('--my', '50');
+        });
+      });
+    }());
+
+    // -------------------------------------------------------
+    // Nav background solidify on scroll
+    // -------------------------------------------------------
+    (function () {
+      var nav = document.querySelector('.nav');
+      if (!nav) return;
+      var handler = function () {
+        if (window.scrollY > 20) {
+          nav.style.backgroundColor = 'rgba(13, 17, 23, 0.96)';
+        } else {
+          nav.style.backgroundColor = 'rgba(13, 17, 23, 0.75)';
+        }
+      };
+      window.addEventListener('scroll', handler, { passive: true });
+    }());
+  </script>
+
+</body>
+</html>
