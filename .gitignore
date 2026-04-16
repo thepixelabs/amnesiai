@@ -1,0 +1,64 @@
+# Binaries
+bin/
+dist/
+amensiai
+amensiai.exe
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+go.work.sum
+
+# GoReleaser
+dist/
+
+# Build cache
+/tmp/
+
+# Secrets & credentials
+secrets.hcl
+secrets.local.*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+auth.json
+.credentials.json
+
+# amensiai local config (never commit user config)
+~/.amensiai/config.toml
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Test coverage
+coverage.out
+coverage.html
+
+# Testdata generated files
+testdata/output/
+
+# goreleaser local config override
+.goreleaser.local.yaml
