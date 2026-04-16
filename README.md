@@ -1,6 +1,6 @@
 <div align="center">
 
-![amensiai](docs/images/amensiai_icon.png)
+<img src="docs/images/amensiai_icon.png" alt="amensiai" width="160">
 
 # git your ai setup
 
