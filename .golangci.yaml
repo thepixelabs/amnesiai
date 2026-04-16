@@ -1,0 +1,15 @@
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gofmt
+    - gosimple
+
+linters-settings:
+  gofmt:
+    simplify: true
+
+issues:
+  max-same-issues: 5
