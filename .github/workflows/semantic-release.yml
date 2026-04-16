@@ -31,7 +31,7 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - uses: actions/create-github-app-token@df432a79ed5b19932c6a1e1a06e7e6d60ef5e93c  # v1.12.0
+      - uses: actions/create-github-app-token@d72941d797fd3113feb6b93fd0dec494b13a2547  # v1.12.0
         id: homebrew-tap-token
         with:
           app-id: ${{ secrets.HOMEBREW_TAP_APP_ID }}
