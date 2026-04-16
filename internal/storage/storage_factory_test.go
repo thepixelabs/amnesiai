@@ -10,10 +10,10 @@ import (
 // implementation or error for each supported and unsupported mode.
 func TestNew_ModeRouting(t *testing.T) {
 	tests := []struct {
-		name          string
-		mode          string
-		wantNilStore  bool
-		wantErr       bool
+		name         string
+		mode         string
+		wantNilStore bool
+		wantErr      bool
 	}{
 		{
 			name:         "LocalReturnsStorage",
