@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/thepixelabs/amensiai/compare/v1.0.0...v1.1.0) (2026-04-16)
+
+### Features
+
+* **landing:** add PixelLabs nav link, dark/light/system theme toggle, restore bird icon visibility ([f854b39](https://github.com/thepixelabs/amensiai/commit/f854b39e36b7a57d3f0bc49c8dce53951af994c3))
+
 ## 1.0.0 (2026-04-16)
 
 ### Features
