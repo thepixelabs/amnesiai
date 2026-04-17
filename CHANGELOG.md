@@ -1,3 +1,9 @@
+## [1.1.1](https://github.com/thepixelabs/amensiai/compare/v1.1.0...v1.1.1) (2026-04-17)
+
+### Bug Fixes
+
+* **deps:** upgrade golang.org/x/crypto to v0.50.0, add npm overrides for picomatch and brace-expansion ([bca7c24](https://github.com/thepixelabs/amensiai/commit/bca7c2444eebe0672d9d68fd1b86a04da6ffc35f)), closes [#1-4](https://github.com/thepixelabs/amensiai/issues/1-4) [#5-6](https://github.com/thepixelabs/amensiai/issues/5-6)
+
 ## [1.1.0](https://github.com/thepixelabs/amensiai/compare/v1.0.0...v1.1.0) (2026-04-16)
 
 ### Features
