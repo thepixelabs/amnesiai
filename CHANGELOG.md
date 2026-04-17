@@ -1,3 +1,9 @@
+## [1.0.1](https://github.com/thepixelabs/amnesiai/compare/v1.0.0...v1.0.1) (2026-04-17)
+
+### Code Refactoring
+
+* rename amensiai to amnesiai + un-LFS docs images ([#6](https://github.com/thepixelabs/amnesiai/issues/6)) ([1bed3e1](https://github.com/thepixelabs/amnesiai/commit/1bed3e11fac2f1deb1f2a695a368395b23e42b6f))
+
 ## 1.0.0 (2026-04-17)
 
 ### Features
