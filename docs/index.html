@@ -1674,19 +1674,8 @@
             alt=""
             width="26"
             height="26"
-><span class="nav__wordmark">amen<span>siai</span></span>
+><span class="nav__wordmark">amne<span>siai</span></span>
         </a>
-        <div class="theme-toggle" role="group" aria-label="Color theme">
-          <button class="theme-btn" id="theme-system" onclick="setTheme('system')" aria-label="System theme" title="System">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
-          </button>
-          <button class="theme-btn" id="theme-light" onclick="setTheme('light')" aria-label="Light theme" title="Light">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
-          </button>
-          <button class="theme-btn" id="theme-dark" onclick="setTheme('dark')" aria-label="Dark theme" title="Dark">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
-          </button>
-        </div>
         <ul class="nav__links" role="list">
           <li><a href="#how-it-works">How it works</a></li>
           <li><a href="#providers">Providers</a></li>
@@ -1705,6 +1694,13 @@
               </svg>
               GitHub
             </a>
+          </li>
+          <li>
+            <button class="theme-btn theme-btn--cycle" id="theme-cycle" onclick="cycleTheme()" aria-label="Toggle color theme" title="Toggle theme">
+              <svg id="theme-icon-system" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none;"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              <svg id="theme-icon-light" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none;"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+              <svg id="theme-icon-dark" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:none;"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+            </button>
           </li>
         </ul>
       </div>
@@ -2163,8 +2159,8 @@
           height="22"
           onerror="this.style.display='none'"
         >
-        <span class="footer__brand-name">amen<span>siai</span></span>
-        <span class="footer__copy">&copy; 2026 The Pixel Labs</span>
+        <span class="footer__brand-name">amne<span>siai</span></span>
+        <span class="footer__copy">&copy; 2026 Pixelabs</span>
       </div>
 
       <nav aria-label="Footer navigation">
@@ -2177,11 +2173,6 @@
           <li>
             <a href="https://github.com/thepixelabs/amnesiai/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
               License (MIT)
-            </a>
-          </li>
-          <li>
-            <a href="https://amnesiai.pixelabs.net">
-              amnesiai.pixelabs.net
             </a>
           </li>
         </ul>
@@ -2347,14 +2338,21 @@
         else root.setAttribute('data-theme', 'light');
       }
       ['system', 'light', 'dark'].forEach(function (id) {
-        var btn = document.getElementById('theme-' + id);
-        if (btn) btn.classList.toggle('active', id === t);
+        var icon = document.getElementById('theme-icon-' + id);
+        if (icon) icon.style.display = (id === t) ? '' : 'none';
       });
     }
 
     function setTheme(t) {
       localStorage.setItem(THEME_KEY, t);
       applyTheme(t);
+    }
+
+    function cycleTheme() {
+      var order = ['system', 'light', 'dark'];
+      var cur = localStorage.getItem(THEME_KEY) || 'system';
+      var next = order[(order.indexOf(cur) + 1) % order.length];
+      setTheme(next);
     }
 
     function initTheme() {
