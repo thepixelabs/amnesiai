@@ -1,3 +1,9 @@
+## [1.0.4](https://github.com/thepixelabs/amnesiai/compare/v1.0.3...v1.0.4) (2026-04-17)
+
+### Performance Improvements
+
+* **docs:** compress landing page images (~10MB → ~1MB) ([c530a58](https://github.com/thepixelabs/amnesiai/commit/c530a58e21506192ff6d167f7848b225751f3fb2))
+
 ## [1.0.3](https://github.com/thepixelabs/amnesiai/compare/v1.0.2...v1.0.3) (2026-04-17)
 
 ### Bug Fixes
