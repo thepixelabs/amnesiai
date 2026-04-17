@@ -1,3 +1,9 @@
+## [1.0.2](https://github.com/thepixelabs/amnesiai/compare/v1.0.1...v1.0.2) (2026-04-17)
+
+### Bug Fixes
+
+* **goreleaser:** remove git.url block so tap push uses GitHub API ([79091e4](https://github.com/thepixelabs/amnesiai/commit/79091e4e6153c7d57d11fbf40ea83223b0b45f33))
+
 ## [1.0.1](https://github.com/thepixelabs/amnesiai/compare/v1.0.0...v1.0.1) (2026-04-17)
 
 ### Code Refactoring
