@@ -45,8 +45,6 @@ brews:
       owner: thepixelabs
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_APP_TOKEN }}"
-      git:
-        url: "https://x-access-token:{{ .Env.HOMEBREW_TAP_APP_TOKEN }}@github.com/thepixelabs/homebrew-tap.git"
     homepage: "https://amnesiai.pixelabs.net"
     description: "git your ai setup — backup and restore AI coding assistant configurations"
     license: "MIT"
