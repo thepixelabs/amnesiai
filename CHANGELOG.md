@@ -1,3 +1,9 @@
+## [1.0.3](https://github.com/thepixelabs/amnesiai/compare/v1.0.2...v1.0.3) (2026-04-17)
+
+### Bug Fixes
+
+* **goreleaser:** put brew formula in Formula/ directory ([df49d9d](https://github.com/thepixelabs/amnesiai/commit/df49d9d2722851edccedb06b98794902f64cf643))
+
 ## [1.0.2](https://github.com/thepixelabs/amnesiai/compare/v1.0.1...v1.0.2) (2026-04-17)
 
 ### Bug Fixes
