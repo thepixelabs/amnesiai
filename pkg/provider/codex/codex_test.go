@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/pkg/provider/codex"
+	"github.com/thepixelabs/amnesiai/pkg/provider/codex"
 )
 
 // populateFakeCodexDir creates a directory structure that mirrors ~/.codex/.

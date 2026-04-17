@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/internal/core"
-	"github.com/thepixelabs/amensiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/core"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 // ─── resolveProviders ─────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-// Package copilot implements the amensiai Provider for GitHub Copilot
+// Package copilot implements the amnesiai Provider for GitHub Copilot
 // configuration.
 //
 // Base directory varies by OS:
@@ -25,7 +25,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/thepixelabs/amensiai/internal/provider"
+	"github.com/thepixelabs/amnesiai/internal/provider"
 )
 
 // sensitiveTerms is the set of substrings that, if found anywhere in a file's
@@ -260,7 +260,7 @@ func atomicWrite(dest string, data []byte) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	tmp := dest + ".amensiai.tmp"
+	tmp := dest + ".amnesiai.tmp"
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}

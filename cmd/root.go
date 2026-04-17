@@ -1,4 +1,4 @@
-// Package cmd defines the CLI commands for amensiai using cobra.
+// Package cmd defines the CLI commands for amnesiai using cobra.
 package cmd
 
 import (
@@ -9,9 +9,9 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/thepixelabs/amensiai/internal/config"
-	"github.com/thepixelabs/amensiai/internal/crypto"
-	"github.com/thepixelabs/amensiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/config"
+	"github.com/thepixelabs/amnesiai/internal/crypto"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 var (
@@ -20,20 +20,20 @@ var (
 	v       = viper.New()
 )
 
-// rootCmd is the base command for amensiai.
+// rootCmd is the base command for amnesiai.
 var rootCmd = &cobra.Command{
-	Use:   "amensiai",
+	Use:   "amnesiai",
 	Short: "Back up and restore AI coding assistant configurations",
-	Long: `amensiai is an open-source CLI that backs up and restores
+	Long: `amnesiai is an open-source CLI that backs up and restores
 configuration files for AI coding assistants including
 Claude Code, Gemini CLI, GitHub Copilot, and Codex CLI.
 
 It supports multiple storage modes (local, git-local, git-remote),
 age encryption, secret scanning, and intelligent git commit messages.`,
-	Example: `  amensiai
-  amensiai backup --providers claude,gemini
-  amensiai restore --id 20240416T143022
-  amensiai completion zsh`,
+	Example: `  amnesiai
+  amnesiai backup --providers claude,gemini
+  amnesiai restore --id 20240416T143022
+  amnesiai completion zsh`,
 	Args:          cobra.NoArgs,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -49,10 +49,10 @@ func Execute() error {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default ~/.amensiai/config.toml)")
+	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default ~/.amnesiai/config.toml)")
 	rootCmd.PersistentFlags().String("storage-mode", "", "storage mode: local, git-local, git-remote")
 	rootCmd.PersistentFlags().String("backup-dir", "", "backup directory path")
-	rootCmd.PersistentFlags().String("passphrase", "", "encryption passphrase (prefer AMENSIAI_PASSPHRASE env)")
+	rootCmd.PersistentFlags().String("passphrase", "", "encryption passphrase (prefer AMNESIAI_PASSPHRASE env)")
 	rootCmd.PersistentFlags().Bool("no-encrypt", false, "skip encryption even if passphrase is available")
 
 	// Bind flags to viper.
@@ -68,14 +68,14 @@ func initConfig() error {
 		if err != nil {
 			return fmt.Errorf("find home directory: %w", err)
 		}
-		configDir := filepath.Join(home, ".amensiai")
+		configDir := filepath.Join(home, ".amnesiai")
 		v.AddConfigPath(configDir)
 		v.SetConfigName("config")
 		v.SetConfigType("toml")
 	}
 
 	// Environment variable overrides.
-	v.SetEnvPrefix("AMENSIAI")
+	v.SetEnvPrefix("AMNESIAI")
 	v.AutomaticEnv()
 
 	// Read config file (ignore "not found" -- defaults will be used).

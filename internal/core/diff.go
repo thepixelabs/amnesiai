@@ -3,9 +3,9 @@ package core
 import (
 	"fmt"
 
-	"github.com/thepixelabs/amensiai/internal/crypto"
-	"github.com/thepixelabs/amensiai/internal/provider"
-	"github.com/thepixelabs/amensiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/crypto"
+	"github.com/thepixelabs/amnesiai/internal/provider"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 // DiffEntry is re-exported from provider for convenience.

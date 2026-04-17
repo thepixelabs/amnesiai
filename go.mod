@@ -1,4 +1,4 @@
-module github.com/thepixelabs/amensiai
+module github.com/thepixelabs/amnesiai
 
 go 1.25.0
 

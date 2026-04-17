@@ -1,4 +1,4 @@
-// Package cmd — TUI entry point for amensiai.
+// Package cmd — TUI entry point for amnesiai.
 //
 // Visual style mirrors the altergo Python library:
 //   - figlet ASCII-art banner with a left-to-right ocean gradient
@@ -25,10 +25,10 @@ import (
 	figure "github.com/common-nighthawk/go-figure"
 	"github.com/spf13/cobra"
 
-	"github.com/thepixelabs/amensiai/internal/core"
-	providerregistry "github.com/thepixelabs/amensiai/internal/provider"
-	"github.com/thepixelabs/amensiai/internal/storage"
-	"github.com/thepixelabs/amensiai/internal/version"
+	"github.com/thepixelabs/amnesiai/internal/core"
+	providerregistry "github.com/thepixelabs/amnesiai/internal/provider"
+	"github.com/thepixelabs/amnesiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/version"
 )
 
 // ─── Ocean palette — matches altergo's "ocean" theme ─────────────────────────
@@ -116,10 +116,10 @@ func gradientText(text string) string {
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
 
-// buildBanner renders the figlet ASCII art of "amensiai" with the ocean gradient
+// buildBanner renders the figlet ASCII art of "amnesiai" with the ocean gradient
 // spread left-to-right across the full banner width (same approach as altergo).
 func buildBanner() string {
-	f := figure.NewFigure("amensiai", "smslant", true)
+	f := figure.NewFigure("amnesiai", "smslant", true)
 	raw := strings.TrimRight(f.String(), "\n")
 	lines := strings.Split(raw, "\n")
 
@@ -286,7 +286,7 @@ type tuiModel struct {
 }
 
 // footerText is the full footer bar content — matches altergo's nav line style.
-const footerText = " ↑↓ navigate · Enter select · q quit · amensiai by pixelabs"
+const footerText = " ↑↓ navigate · Enter select · q quit · amnesiai by pixelabs"
 
 func newTUIModel() tuiModel {
 	return tuiModel{
@@ -349,7 +349,7 @@ func (m tuiModel) View() string {
 	if version.Version != "dev" {
 		ver = " " + version.Version
 	}
-	verLine := tuiMutedStyle.Render("  amensiai" + ver + " — back up AI assistant configs")
+	verLine := tuiMutedStyle.Render("  amnesiai" + ver + " — back up AI assistant configs")
 	greetLine := tuiIndigoStyle.Render("  "+m.greeting.icon+"  ") + gradientText(m.greeting.text)
 
 	bannerBox := tuiBorderStyle.Render(banner + "\n" + verLine + "\n" + greetLine)
@@ -453,7 +453,7 @@ func init() {
 	rootCmd.AddCommand(tuiCmd)
 }
 
-// runRoot is called when amensiai is invoked with no subcommand. It launches the
+// runRoot is called when amnesiai is invoked with no subcommand. It launches the
 // TUI when stdout is a TTY, otherwise prints help (matching altergo's pattern of
 // checking only sys.stdout.isatty()).
 func runRoot(cmd *cobra.Command, args []string) error {
@@ -568,7 +568,7 @@ func (ui *legacyUI) backupFlow() error {
 
 	passphrase := getPassphrase(ui.cmd)
 	if passphrase == "" {
-		fmt.Println(tuiMutedStyle.Render("Encryption: disabled (set AMENSIAI_PASSPHRASE to enable)"))
+		fmt.Println(tuiMutedStyle.Render("Encryption: disabled (set AMNESIAI_PASSPHRASE to enable)"))
 	} else {
 		fmt.Println(tuiSuccessStyle.Render("Encryption: enabled"))
 	}
@@ -759,10 +759,10 @@ func (ui *legacyUI) completionHelp() {
 	fmt.Println("This is a command, not a flag. It prints a shell completion script.")
 	fmt.Println()
 	fmt.Println(tuiAccentStyle.Render("Examples"))
-	fmt.Println("  bash:  amensiai completion bash > ~/.local/share/bash-completion/completions/amensiai")
-	fmt.Println("  zsh:   amensiai completion zsh > ~/.zfunc/_amensiai")
-	fmt.Println("  fish:  amensiai completion fish > ~/.config/fish/completions/amensiai.fish")
-	fmt.Println("  pwsh:  amensiai completion powershell > amensiai.ps1")
+	fmt.Println("  bash:  amnesiai completion bash > ~/.local/share/bash-completion/completions/amnesiai")
+	fmt.Println("  zsh:   amnesiai completion zsh > ~/.zfunc/_amnesiai")
+	fmt.Println("  fish:  amnesiai completion fish > ~/.config/fish/completions/amnesiai.fish")
+	fmt.Println("  pwsh:  amnesiai completion powershell > amnesiai.ps1")
 	fmt.Println()
 	fmt.Println(tuiMutedStyle.Render("After writing the script, reload your shell config to enable tab completion."))
 	tuiPause(ui.reader())
@@ -775,7 +775,7 @@ func tuiClearScreen() {
 }
 
 func tuiPrintSubHeader(subtitle string) {
-	title := "amensiai"
+	title := "amnesiai"
 	if version.Version != "dev" {
 		title += " " + version.Version
 	}

@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/internal/crypto"
+	"github.com/thepixelabs/amnesiai/internal/crypto"
 )
 
 // TestEncryptDecryptRoundTrip verifies that encrypting then decrypting returns
@@ -97,7 +97,7 @@ func TestEmptyPassphraseSkipsEncryption(t *testing.T) {
 // TestPassphraseFromEnvOrFlag_EnvTakesPriority verifies that when both env var
 // and flag are set, the env var wins.
 func TestPassphraseFromEnvOrFlag_EnvTakesPriority(t *testing.T) {
-	t.Setenv("AMENSIAI_PASSPHRASE", "from-env")
+	t.Setenv("AMNESIAI_PASSPHRASE", "from-env")
 
 	got := crypto.PassphraseFromEnvOrFlag("from-flag")
 	if got != "from-env" {
@@ -109,7 +109,7 @@ func TestPassphraseFromEnvOrFlag_EnvTakesPriority(t *testing.T) {
 // value is returned when the env var is not set.
 func TestPassphraseFromEnvOrFlag_FlagUsedWhenEnvEmpty(t *testing.T) {
 	// Ensure the env var is absent for this test.
-	if err := os.Unsetenv("AMENSIAI_PASSPHRASE"); err != nil {
+	if err := os.Unsetenv("AMNESIAI_PASSPHRASE"); err != nil {
 		t.Fatalf("unsetenv: %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestPassphraseFromEnvOrFlag_FlagUsedWhenEnvEmpty(t *testing.T) {
 // TestPassphraseFromEnvOrFlag_BothEmptyReturnsEmpty verifies that when neither
 // env var nor flag are set, an empty string is returned (encryption is optional).
 func TestPassphraseFromEnvOrFlag_BothEmptyReturnsEmpty(t *testing.T) {
-	if err := os.Unsetenv("AMENSIAI_PASSPHRASE"); err != nil {
+	if err := os.Unsetenv("AMNESIAI_PASSPHRASE"); err != nil {
 		t.Fatalf("unsetenv: %v", err)
 	}
 

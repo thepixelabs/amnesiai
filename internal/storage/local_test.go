@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/thepixelabs/amensiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 // newLocalStorage creates a localStorage instance backed by a temp directory.

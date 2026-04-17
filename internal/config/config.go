@@ -1,6 +1,6 @@
-// Package config handles loading and saving of amensiai configuration.
-// Configuration is stored at ~/.amensiai/config.toml and can be overridden
-// by environment variables prefixed with AMENSIAI_ or by CLI flags.
+// Package config handles loading and saving of amnesiai configuration.
+// Configuration is stored at ~/.amnesiai/config.toml and can be overridden
+// by environment variables prefixed with AMNESIAI_ or by CLI flags.
 package config
 
 import (
@@ -17,7 +17,7 @@ type GitRemote struct {
 	Branch string `mapstructure:"branch"`
 }
 
-// Config holds the top-level amensiai configuration.
+// Config holds the top-level amnesiai configuration.
 type Config struct {
 	StorageMode string    `mapstructure:"storage_mode"` // "local" | "git-local" | "git-remote"
 	BackupDir   string    `mapstructure:"backup_dir"`   // absolute path for backups
@@ -37,7 +37,7 @@ func DefaultConfig() Config {
 	home, _ := os.UserHomeDir()
 	return Config{
 		StorageMode: "local",
-		BackupDir:   filepath.Join(home, ".amensiai", "backups"),
+		BackupDir:   filepath.Join(home, ".amnesiai", "backups"),
 		Providers:   DefaultProviders(),
 		GitRemote: GitRemote{
 			Branch: "main",
@@ -47,13 +47,13 @@ func DefaultConfig() Config {
 	}
 }
 
-// ConfigDir returns the path to the amensiai configuration directory (~/.amensiai).
+// ConfigDir returns the path to the amnesiai configuration directory (~/.amnesiai).
 func ConfigDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine home directory: %w", err)
 	}
-	return filepath.Join(home, ".amensiai"), nil
+	return filepath.Join(home, ".amnesiai"), nil
 }
 
 // ConfigFilePath returns the path to the default config file.
@@ -93,7 +93,7 @@ func Load(v *viper.Viper) (Config, error) {
 	return cfg, nil
 }
 
-// Save writes the configuration to ~/.amensiai/config.toml.
+// Save writes the configuration to ~/.amnesiai/config.toml.
 func Save(cfg Config) error {
 	dir, err := ConfigDir()
 	if err != nil {

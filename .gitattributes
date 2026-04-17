@@ -1,3 +1,0 @@
-docs/images/*.png filter=lfs diff=lfs merge=lfs -text
-docs/images/*.jpg filter=lfs diff=lfs merge=lfs -text
-docs/favicon.ico filter=lfs diff=lfs merge=lfs -text

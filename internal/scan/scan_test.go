@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/internal/scan"
+	"github.com/thepixelabs/amnesiai/internal/scan"
 )
 
 // TestScan_RedactsAWSAccessToken verifies that a string containing an AWS

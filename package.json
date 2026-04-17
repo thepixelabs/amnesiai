@@ -1,5 +1,5 @@
 {
-  "name": "amensiai",
+  "name": "amnesiai",
   "version": "0.1.0",
   "private": true,
   "description": "Shim package.json — not published to npm. Exists only to pin semantic-release and its plugins for the release workflow.",

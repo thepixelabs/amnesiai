@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/internal/core"
-	"github.com/thepixelabs/amensiai/internal/crypto"
-	"github.com/thepixelabs/amensiai/internal/provider"
-	"github.com/thepixelabs/amensiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/core"
+	"github.com/thepixelabs/amnesiai/internal/crypto"
+	"github.com/thepixelabs/amnesiai/internal/provider"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 // ----------------------------------------------------------------------------

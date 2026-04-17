@@ -1,23 +1,23 @@
 <div align="center">
 
-<img src="docs/images/amensiai_icon.png" alt="amensiai" width="160">
+<img src="docs/images/amnesiai_icon.png" alt="amnesiai" width="160">
 
 # git your ai setup
 
-[![CI](https://github.com/thepixelabs/amensiai/actions/workflows/ci.yml/badge.svg)](https://github.com/thepixelabs/amensiai/actions)
+[![CI](https://github.com/thepixelabs/amnesiai/actions/workflows/ci.yml/badge.svg)](https://github.com/thepixelabs/amnesiai/actions)
 [![Go 1.24](https://img.shields.io/badge/go-1.24-00ADD8?logo=go)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 </div>
 
-You've spent hours tuning your AI coding assistants — custom instructions, memory files, agent configs, theme preferences. Then you get a new machine, or something overwrites your setup, and it's gone. **amensiai** versions those configs the same way you version your code.
+You've spent hours tuning your AI coding assistants — custom instructions, memory files, agent configs, theme preferences. Then you get a new machine, or something overwrites your setup, and it's gone. **amnesiai** versions those configs the same way you version your code.
 
 ---
 
 ## Install
 
 ```sh
-brew install thepixelabs/tap/amensiai
+brew install thepixelabs/tap/amnesiai
 ```
 
 ---
@@ -26,25 +26,25 @@ brew install thepixelabs/tap/amensiai
 
 ```sh
 # Open the interactive terminal UI
-amensiai
+amnesiai
 
 # Or use the classic argument-based commands
-amensiai backup
+amnesiai backup
 
 # See what's stored
-amensiai list
+amnesiai list
 
 # Check what's drifted since last backup
-amensiai diff
+amnesiai diff
 
 # Recover configs on a new machine (or after a bad day)
-amensiai restore
+amnesiai restore
 ```
 
 Restore a specific snapshot by ID:
 
 ```sh
-amensiai restore --id 20240416T143022
+amnesiai restore --id 20240416T143022
 ```
 
 ---
@@ -63,18 +63,18 @@ Copilot's base directory is `~/Library/Application Support/GitHub Copilot/` on m
 Back up a subset of providers:
 
 ```sh
-amensiai backup --providers claude,gemini
+amnesiai backup --providers claude,gemini
 ```
 
 ---
 
 ## Storage modes
 
-- **`local`** — compressed tarballs in `~/.amensiai/backups/`. Default. Fully implemented.
+- **`local`** — compressed tarballs in `~/.amnesiai/backups/`. Default. Fully implemented.
 - **`git-local`** — planned, but not implemented in the current binary yet.
 - **`git-remote`** — planned, but not implemented in the current binary yet.
 
-Set the mode in `~/.amensiai/config.toml` or pass `--storage-mode` on any command.
+Set the mode in `~/.amnesiai/config.toml` or pass `--storage-mode` on any command.
 
 ---
 
@@ -84,13 +84,13 @@ Set the mode in `~/.amensiai/config.toml` or pass `--storage-mode` on any comman
 
 ```sh
 # zsh
-amensiai completion zsh > ~/.zfunc/_amensiai
+amnesiai completion zsh > ~/.zfunc/_amnesiai
 
 # bash
-amensiai completion bash > ~/.local/share/bash-completion/completions/amensiai
+amnesiai completion bash > ~/.local/share/bash-completion/completions/amnesiai
 
 # fish
-amensiai completion fish > ~/.config/fish/completions/amensiai.fish
+amnesiai completion fish > ~/.config/fish/completions/amnesiai.fish
 ```
 
 Reload your shell after writing the file.
@@ -99,11 +99,11 @@ Reload your shell after writing the file.
 
 ## Encryption
 
-Backups are encrypted with [age](https://age-encryption.org) using a passphrase you supply. amensiai stores no keys. Set `AMENSIAI_PASSPHRASE` in your environment, or pass `--passphrase` at the command line. To skip encryption explicitly, pass `--no-encrypt`.
+Backups are encrypted with [age](https://age-encryption.org) using a passphrase you supply. amnesiai stores no keys. Set `AMNESIAI_PASSPHRASE` in your environment, or pass `--passphrase` at the command line. To skip encryption explicitly, pass `--no-encrypt`.
 
 ```sh
-export AMENSIAI_PASSPHRASE="correct horse battery staple"
-amensiai backup
+export AMNESIAI_PASSPHRASE="correct horse battery staple"
+amnesiai backup
 ```
 
 Restore decrypts automatically when the passphrase is available.
@@ -118,19 +118,19 @@ Before any file enters a backup, [gitleaks](https://github.com/gitleaks/gitleaks
 
 ## Config reference
 
-`~/.amensiai/config.toml` — created automatically on first run with these defaults:
+`~/.amnesiai/config.toml` — created automatically on first run with these defaults:
 
 | Key | Default | Description |
 |---|---|---|
 | `storage_mode` | `"local"` | `local`, `git-local`, or `git-remote` |
-| `backup_dir` | `~/.amensiai/backups` | Where snapshots are written |
+| `backup_dir` | `~/.amnesiai/backups` | Where snapshots are written |
 | `providers` | all four | Subset to back up by default |
 | `git_remote.url` | — | Remote URL (required for `git-remote` mode) |
 | `git_remote.branch` | `"main"` | Branch to push to |
 | `auto_commit` | `true` | Commit after each backup in git modes |
 | `auto_push` | `false` | Push after each commit in `git-remote` mode |
 
-All keys can be overridden by environment variables (`AMENSIAI_STORAGE_MODE`, `AMENSIAI_BACKUP_DIR`, etc.) or by CLI flags. Run `amensiai --help` for the full flag list.
+All keys can be overridden by environment variables (`AMNESIAI_STORAGE_MODE`, `AMNESIAI_BACKUP_DIR`, etc.) or by CLI flags. Run `amnesiai --help` for the full flag list.
 
 ---
 
@@ -138,4 +138,4 @@ All keys can be overridden by environment variables (`AMENSIAI_STORAGE_MODE`, `A
 
 MIT — see [LICENSE](LICENSE).
 
-[amensiai.pixelabs.net](https://amensiai.pixelabs.net) · [thepixelabs/amensiai](https://github.com/thepixelabs/amensiai)
+[amnesiai.pixelabs.net](https://amnesiai.pixelabs.net) · [thepixelabs/amnesiai](https://github.com/thepixelabs/amnesiai)

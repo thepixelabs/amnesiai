@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/thepixelabs/amensiai/cmd"
-	_ "github.com/thepixelabs/amensiai/internal/provider/all"
+	"github.com/thepixelabs/amnesiai/cmd"
+	_ "github.com/thepixelabs/amnesiai/internal/provider/all"
 )
 
 func main() {
