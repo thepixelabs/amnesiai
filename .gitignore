@@ -1,8 +1,8 @@
 # Binaries
 bin/
 dist/
-amensiai
-amensiai.exe
+amnesiai
+amnesiai.exe
 
 # Node (semantic-release tooling)
 node_modules/
@@ -38,7 +38,7 @@ secrets.local.*
 auth.json
 .credentials.json
 
-# amensiai local config lives at ~/.amensiai/config.toml — it is outside the
+# amnesiai local config lives at ~/.amnesiai/config.toml — it is outside the
 # repo root and cannot be committed. No .gitignore entry needed here.
 
 # Claude Code local IDE state — contains machine-local tool permissions and

@@ -1,4 +1,4 @@
-// Package codex implements the amensiai Provider for OpenAI Codex CLI
+// Package codex implements the amnesiai Provider for OpenAI Codex CLI
 // configuration.
 //
 // Backed-up paths under ~/.codex/:
@@ -20,7 +20,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/thepixelabs/amensiai/internal/provider"
+	"github.com/thepixelabs/amnesiai/internal/provider"
 )
 
 // allowedTopLevel is the set of file names and directory names directly under
@@ -241,7 +241,7 @@ func atomicWrite(dest string, data []byte) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
-	tmp := dest + ".amensiai.tmp"
+	tmp := dest + ".amnesiai.tmp"
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}

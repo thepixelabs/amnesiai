@@ -3,7 +3,7 @@ package storage_test
 import (
 	"testing"
 
-	"github.com/thepixelabs/amensiai/internal/storage"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 // TestNew_ModeRouting verifies that storage.New returns the correct

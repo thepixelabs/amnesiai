@@ -1,5 +1,5 @@
 // Package crypto provides age-based passphrase encryption and decryption
-// for amensiai backup payloads.
+// for amnesiai backup payloads.
 package crypto
 
 import (
@@ -64,10 +64,10 @@ func Decrypt(passphrase string, ciphertext []byte) ([]byte, error) {
 }
 
 // PassphraseFromEnvOrFlag returns the passphrase to use for encryption.
-// Priority: AMENSIAI_PASSPHRASE env var > flagVal argument.
+// Priority: AMNESIAI_PASSPHRASE env var > flagVal argument.
 // Returns empty string if neither is set (encryption is optional).
 func PassphraseFromEnvOrFlag(flagVal string) string {
-	if envVal := os.Getenv("AMENSIAI_PASSPHRASE"); envVal != "" {
+	if envVal := os.Getenv("AMNESIAI_PASSPHRASE"); envVal != "" {
 		return envVal
 	}
 	return flagVal

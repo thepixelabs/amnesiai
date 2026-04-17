@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/spf13/viper"
-	"github.com/thepixelabs/amensiai/internal/config"
+	"github.com/thepixelabs/amnesiai/internal/config"
 )
 
 // newViperFromFile creates a viper instance pointed at the given TOML file.
@@ -91,7 +91,7 @@ func TestLoad_MissingFileReturnsSensibleDefaults(t *testing.T) {
 }
 
 // TestLoad_EnvVarOverridesTomlStorageMode verifies that the
-// AMENSIAI_STORAGE_MODE environment variable takes precedence over the
+// AMNESIAI_STORAGE_MODE environment variable takes precedence over the
 // value set in the TOML config file.
 func TestLoad_EnvVarOverridesTomlStorageMode(t *testing.T) {
 	dir := t.TempDir()
@@ -102,13 +102,13 @@ func TestLoad_EnvVarOverridesTomlStorageMode(t *testing.T) {
 		t.Fatalf("write config file: %v", err)
 	}
 
-	t.Setenv("AMENSIAI_STORAGE_MODE", "git-remote")
+	t.Setenv("AMNESIAI_STORAGE_MODE", "git-remote")
 
 	v := newViperFromFile(t, cfgPath)
 	// Bind the env var so viper picks it up.
-	v.SetEnvPrefix("AMENSIAI")
+	v.SetEnvPrefix("AMNESIAI")
 	v.AutomaticEnv()
-	if err := v.BindEnv("storage_mode", "AMENSIAI_STORAGE_MODE"); err != nil {
+	if err := v.BindEnv("storage_mode", "AMNESIAI_STORAGE_MODE"); err != nil {
 		t.Fatalf("BindEnv: %v", err)
 	}
 

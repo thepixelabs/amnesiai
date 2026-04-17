@@ -3,7 +3,7 @@ package core_test
 import (
 	"testing"
 
-	"github.com/thepixelabs/amensiai/internal/core"
+	"github.com/thepixelabs/amnesiai/internal/core"
 )
 
 // TestDiff_NoChanges_AllUnchanged verifies that when the current provider

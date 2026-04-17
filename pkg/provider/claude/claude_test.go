@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/pkg/provider/claude"
+	"github.com/thepixelabs/amnesiai/pkg/provider/claude"
 )
 
 // populateFakeClaudeDir creates a directory structure that mirrors ~/.claude/

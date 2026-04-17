@@ -6,7 +6,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/pkg/provider/gemini"
+	"github.com/thepixelabs/amnesiai/pkg/provider/gemini"
 )
 
 // populateFakeGeminiDir creates a directory structure that mirrors ~/.gemini/.

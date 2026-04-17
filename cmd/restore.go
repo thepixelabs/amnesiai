@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/thepixelabs/amensiai/internal/core"
+	"github.com/thepixelabs/amnesiai/internal/core"
 )
 
 var restoreCmd = &cobra.Command{

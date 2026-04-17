@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
-project_name: amensiai
+project_name: amnesiai
 
 before:
   hooks:
@@ -13,9 +13,9 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/thepixelabs/amensiai/internal/version.Version={{.Version}}
-      - -X github.com/thepixelabs/amensiai/internal/version.Commit={{.Commit}}
-      - -X github.com/thepixelabs/amensiai/internal/version.Date={{.Date}}
+      - -X github.com/thepixelabs/amnesiai/internal/version.Version={{.Version}}
+      - -X github.com/thepixelabs/amnesiai/internal/version.Commit={{.Commit}}
+      - -X github.com/thepixelabs/amnesiai/internal/version.Date={{.Date}}
 
 archives:
   - format: tar.gz
@@ -40,17 +40,17 @@ changelog:
     exclude: ["^docs:", "^test:", "^chore:"]
 
 brews:
-  - name: amensiai
+  - name: amnesiai
     repository:
       owner: thepixelabs
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_APP_TOKEN }}"
       git:
         url: "https://x-access-token:{{ .Env.HOMEBREW_TAP_APP_TOKEN }}@github.com/thepixelabs/homebrew-tap.git"
-    homepage: "https://amensiai.pixelabs.net"
+    homepage: "https://amnesiai.pixelabs.net"
     description: "git your ai setup — backup and restore AI coding assistant configurations"
     license: "MIT"
     install: |
-      bin.install "amensiai"
+      bin.install "amnesiai"
     test: |
-      system "#{bin}/amensiai", "version"
+      system "#{bin}/amnesiai", "version"

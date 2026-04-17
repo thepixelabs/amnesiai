@@ -1,4 +1,4 @@
-// Package claude implements the amensiai Provider for Claude Code configuration.
+// Package claude implements the amnesiai Provider for Claude Code configuration.
 //
 // Backed-up paths under ~/.claude/:
 //   - CLAUDE.md
@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/thepixelabs/amensiai/internal/provider"
+	"github.com/thepixelabs/amnesiai/internal/provider"
 )
 
 // excludedDirs are subdirectory names under ~/.claude/ that must never be
@@ -199,7 +199,7 @@ func (p *Provider) Diff(snapshot map[string][]byte) ([]provider.DiffEntry, error
 
 // Restore writes every file in snapshot back under ~/.claude/, creating parent
 // directories (mode 0700) as needed.  Each write is atomic: content is written
-// to a .amensiai.tmp sibling then renamed into place.  Credential files are
+// to a .amnesiai.tmp sibling then renamed into place.  Credential files are
 // silently skipped even if present in the snapshot.
 func (p *Provider) Restore(snapshot map[string][]byte) error {
 	for rel, data := range snapshot {
@@ -238,7 +238,7 @@ func atomicWrite(dest string, data []byte) error {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 
-	tmp := dest + ".amensiai.tmp"
+	tmp := dest + ".amnesiai.tmp"
 	if err := os.WriteFile(tmp, data, 0600); err != nil {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}

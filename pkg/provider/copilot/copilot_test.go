@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/thepixelabs/amensiai/pkg/provider/copilot"
+	"github.com/thepixelabs/amnesiai/pkg/provider/copilot"
 )
 
 // populateFakeCopilotDir creates a directory structure representing a Copilot

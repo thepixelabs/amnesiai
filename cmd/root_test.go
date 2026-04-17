@@ -32,8 +32,8 @@ func TestRootCommand_NoArgsNonTTY_PrintsHelpExitsZero(t *testing.T) {
 	if out == "" {
 		t.Fatal("Execute() produced no output; expected help text")
 	}
-	if !containsAny(out, "amensiai", "backup", "restore") {
-		t.Errorf("help output does not mention amensiai or subcommands; got:\n%s", out)
+	if !containsAny(out, "amnesiai", "backup", "restore") {
+		t.Errorf("help output does not mention amnesiai or subcommands; got:\n%s", out)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestRootCommand_HelpFlag_ExitsZero(t *testing.T) {
 	}
 
 	out := buf.String()
-	if !containsAny(out, "amensiai", "backup") {
-		t.Errorf("--help output does not mention amensiai or backup; got:\n%s", out)
+	if !containsAny(out, "amnesiai", "backup") {
+		t.Errorf("--help output does not mention amnesiai or backup; got:\n%s", out)
 	}
 }
 
