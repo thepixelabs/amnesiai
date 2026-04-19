@@ -190,3 +190,80 @@ func TestValidate_AllFourProvidersValid(t *testing.T) {
 		t.Errorf("expected no error for all four providers, got: %v", err)
 	}
 }
+
+// TestSaveLoad_RoundTrip verifies that every Config field survives a Save/Load
+// cycle.  This guards against the "silently dropped field" class of bug where a
+// new field is added to the struct but forgotten in Save().
+func TestSaveLoad_RoundTrip(t *testing.T) {
+	dir := t.TempDir()
+
+	// Patch config dir by writing to a temp path and loading via viper directly.
+	// We call Save (which writes to ~/.amnesiai/config.toml) and then redirect
+	// the Load viper to that same file.  To avoid touching the real home dir we
+	// swap the config path via the cfgFile mechanism used by the CLI.
+	cfgPath := filepath.Join(dir, "config.toml")
+
+	// Build a Config with non-zero/non-default values for every field.
+	want := config.Config{
+		StorageMode: "git-local",
+		BackupDir:   filepath.Join(dir, "backups"),
+		Providers:   []string{"claude", "codex"},
+		GitRemote: config.GitRemote{
+			URL:    "https://github.com/example/cfg.git",
+			Branch: "backup",
+		},
+		AutoCommit:  false,
+		AutoPush:    true,
+		BackupCount: 42,
+		FirstRun:    false,
+		VerboseHelp: true,
+		Telemetry:   true,
+	}
+
+	// Save using a viper instance pointed at our temp path.
+	if err := config.SaveTo(want, cfgPath); err != nil {
+		t.Fatalf("SaveTo: %v", err)
+	}
+
+	// Load back.
+	v := newViperFromFile(t, cfgPath)
+	got, err := config.Load(v)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	// Assert field by field so failures identify the exact culprit.
+	if got.StorageMode != want.StorageMode {
+		t.Errorf("StorageMode: got %q, want %q", got.StorageMode, want.StorageMode)
+	}
+	if got.BackupDir != want.BackupDir {
+		t.Errorf("BackupDir: got %q, want %q", got.BackupDir, want.BackupDir)
+	}
+	if len(got.Providers) != len(want.Providers) {
+		t.Errorf("Providers length: got %d, want %d (%v)", len(got.Providers), len(want.Providers), got.Providers)
+	}
+	if got.GitRemote.URL != want.GitRemote.URL {
+		t.Errorf("GitRemote.URL: got %q, want %q", got.GitRemote.URL, want.GitRemote.URL)
+	}
+	if got.GitRemote.Branch != want.GitRemote.Branch {
+		t.Errorf("GitRemote.Branch: got %q, want %q", got.GitRemote.Branch, want.GitRemote.Branch)
+	}
+	if got.AutoCommit != want.AutoCommit {
+		t.Errorf("AutoCommit: got %v, want %v", got.AutoCommit, want.AutoCommit)
+	}
+	if got.AutoPush != want.AutoPush {
+		t.Errorf("AutoPush: got %v, want %v", got.AutoPush, want.AutoPush)
+	}
+	if got.BackupCount != want.BackupCount {
+		t.Errorf("BackupCount: got %d, want %d", got.BackupCount, want.BackupCount)
+	}
+	if got.FirstRun != want.FirstRun {
+		t.Errorf("FirstRun: got %v, want %v", got.FirstRun, want.FirstRun)
+	}
+	if got.VerboseHelp != want.VerboseHelp {
+		t.Errorf("VerboseHelp: got %v, want %v", got.VerboseHelp, want.VerboseHelp)
+	}
+	if got.Telemetry != want.Telemetry {
+		t.Errorf("Telemetry: got %v, want %v", got.Telemetry, want.Telemetry)
+	}
+}

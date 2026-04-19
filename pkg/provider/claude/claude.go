@@ -3,14 +3,15 @@
 // Backed-up paths under ~/.claude/:
 //   - CLAUDE.md
 //   - settings.json
-//   - settings.local.json
-//   - todos/   (all files, recursively)
-//   - ide/     (all files, recursively)
+//   - keybindings.json  (if present)
 //
 // Explicitly excluded (never read, never restored):
-//   - projects/          (conversation history / PII)
-//   - statsig/           (internal telemetry state)
-//   - .credentials.json  (credential file — never touch)
+//   - projects/             (conversation history / PII)
+//   - statsig/              (internal telemetry state)
+//   - todos/                (ephemeral task lists — not portable)
+//   - ide/                  (machine-local IDE integration state)
+//   - .credentials.json     (credential file — never touch)
+//   - settings.local.json   (machine-local override — not portable)
 package claude
 
 import (
@@ -30,12 +31,15 @@ import (
 var excludedDirs = map[string]bool{
 	"projects": true,
 	"statsig":  true,
+	"todos":    true,
+	"ide":      true,
 }
 
-// credentialFiles are specific file names that must never be backed up or
-// restored, regardless of how they appear in a snapshot.
-var credentialFiles = map[string]bool{
-	".credentials.json": true,
+// excludedFiles are specific file names that must never be backed up or
+// restored, regardless of where they appear in the tree.
+var excludedFiles = map[string]bool{
+	".credentials.json":   true,
+	"settings.local.json": true,
 }
 
 // Compile-time assertion: *Provider must satisfy the provider.Provider interface.
@@ -114,7 +118,7 @@ func (p *Provider) Discover() ([]string, error) {
 			return nil
 		}
 		// Skip credential files anywhere in the tree.
-		if credentialFiles[filepath.Base(rel)] {
+		if excludedFiles[filepath.Base(rel)] {
 			return nil
 		}
 
@@ -205,7 +209,7 @@ func (p *Provider) Restore(snapshot map[string][]byte) error {
 	for rel, data := range snapshot {
 		// Guard: never restore credential files.
 		base := filepath.Base(rel)
-		if credentialFiles[base] {
+		if excludedFiles[base] {
 			log.Printf("claude: restore: skipping credential file %s", rel)
 			continue
 		}

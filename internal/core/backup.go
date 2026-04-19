@@ -109,6 +109,8 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		Timestamp: now,
 		Providers: actualProviderNames,
 		Labels:    opts.Labels,
+		Message:   opts.Message,
+		Encrypted: opts.Passphrase != "",
 	}
 
 	// Save to storage.

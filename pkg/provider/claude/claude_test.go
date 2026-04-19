@@ -11,20 +11,20 @@ import (
 
 // populateFakeClaudeDir creates a directory structure that mirrors ~/.claude/
 // with files that should be discovered, files that should be excluded, and
-// the excluded project/statsig subtrees.
+// excluded subtrees.
 //
 //	<base>/
-//	  CLAUDE.md
-//	  settings.json
-//	  settings.local.json
-//	  todos/
+//	  CLAUDE.md                   <-- backed up
+//	  settings.json               <-- backed up
+//	  settings.local.json         <-- excluded (machine-local)
+//	  todos/                      <-- entire subtree excluded
 //	    todo1.md
-//	  ide/
+//	  ide/                        <-- entire subtree excluded
 //	    keybindings.json
-//	  .credentials.json          <-- must be excluded
-//	  projects/                  <-- entire subtree excluded
+//	  .credentials.json           <-- excluded (credential file)
+//	  projects/                   <-- entire subtree excluded
 //	    conversation.json
-//	  statsig/                   <-- entire subtree excluded
+//	  statsig/                    <-- entire subtree excluded
 //	    state.json
 func populateFakeClaudeDir(t *testing.T, base string) {
 	t.Helper()
@@ -49,8 +49,8 @@ func populateFakeClaudeDir(t *testing.T, base string) {
 }
 
 // TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs verifies that
-// Discover includes the expected config files and excludes the projects/,
-// statsig/ directories and the .credentials.json file.
+// Discover includes only the portable config files and excludes projects/,
+// statsig/, todos/, ide/, .credentials.json, and settings.local.json.
 func TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs(t *testing.T) {
 	base := t.TempDir()
 	populateFakeClaudeDir(t, base)
@@ -69,12 +69,10 @@ func TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs(t *testing.T) {
 	}
 	sort.Strings(rel)
 
+	// Only the portable, non-machine-local files survive.
 	want := []string{
 		"CLAUDE.md",
-		"ide/keybindings.json",
 		"settings.json",
-		"settings.local.json",
-		"todos/todo1.md",
 	}
 	sort.Strings(want)
 
@@ -107,9 +105,10 @@ func TestDiscover_ExcludesCredentialsJSON(t *testing.T) {
 	}
 }
 
-// TestDiscover_ExcludesProjectsAndStatsig verifies that files under the
-// projects/ and statsig/ subdirectories are never discovered.
-func TestDiscover_ExcludesProjectsAndStatsig(t *testing.T) {
+// TestDiscover_ExcludesAllExcludedDirs verifies that files under projects/,
+// statsig/, todos/, and ide/ are never discovered, and that settings.local.json
+// is also excluded.
+func TestDiscover_ExcludesAllExcludedDirs(t *testing.T) {
 	base := t.TempDir()
 	populateFakeClaudeDir(t, base)
 
@@ -119,9 +118,17 @@ func TestDiscover_ExcludesProjectsAndStatsig(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 
+	excluded := map[string]bool{
+		"projects": true,
+		"statsig":  true,
+		"todos":    true,
+		"ide":      true,
+	}
+
 	for _, path := range paths {
 		rel, _ := filepath.Rel(base, path)
-		// Walk up to find the first path component below base.
+
+		// Check excluded directories.
 		top := rel
 		for {
 			parent := filepath.Dir(top)
@@ -130,8 +137,13 @@ func TestDiscover_ExcludesProjectsAndStatsig(t *testing.T) {
 			}
 			top = parent
 		}
-		if top == "projects" || top == "statsig" {
+		if excluded[top] {
 			t.Errorf("Discover returned a file inside excluded directory %q: %s", top, path)
+		}
+
+		// Check excluded files.
+		if filepath.Base(rel) == "settings.local.json" {
+			t.Errorf("Discover returned settings.local.json but it must always be excluded: %s", path)
 		}
 	}
 }
@@ -143,8 +155,8 @@ func TestRestore_WritesFilesWithCorrectPermissions(t *testing.T) {
 	p := claude.NewWithBaseDir(base)
 
 	snapshot := map[string][]byte{
-		"settings.json":      []byte(`{"theme":"dark"}`),
-		"todos/important.md": []byte("- [ ] finish tests"),
+		"settings.json": []byte(`{"theme":"dark"}`),
+		"CLAUDE.md":     []byte("# My prompt"),
 	}
 
 	if err := p.Restore(snapshot); err != nil {
@@ -299,9 +311,9 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		// Write a new eligible file (a .md in the todos/ subtree is in scope).
-		newFile := filepath.Join(base, "todos", "extra.md")
-		if err := os.WriteFile(newFile, []byte("- [ ] new task"), 0600); err != nil {
+		// Write a new eligible file at the top level — not in an excluded dir.
+		newFile := filepath.Join(base, "extra.md")
+		if err := os.WriteFile(newFile, []byte("# extra notes"), 0600); err != nil {
 			t.Fatalf("write extra.md: %v", err)
 		}
 
@@ -311,7 +323,7 @@ func TestDiff_StatusCases(t *testing.T) {
 		}
 		found := false
 		for _, e := range entries {
-			if e.Path == filepath.Join("todos", "extra.md") {
+			if e.Path == "extra.md" {
 				found = true
 				if e.Status != "added" {
 					t.Errorf("extra.md: got status %q, want %q", e.Status, "added")
@@ -319,7 +331,7 @@ func TestDiff_StatusCases(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Error("Diff did not return an entry for the newly added todos/extra.md")
+			t.Error("Diff did not return an entry for the newly added extra.md")
 		}
 	})
 

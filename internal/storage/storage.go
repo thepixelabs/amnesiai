@@ -15,13 +15,25 @@ import (
 // ErrNoBackups is returned when no backups exist in the storage.
 var ErrNoBackups = errors.New("no backups found")
 
+// FindingSummary records a single redacted secret discovered during scanning.
+// SecretHash is the hex-encoded SHA-256 of the raw secret bytes; the original
+// value is never stored.
+type FindingSummary struct {
+	RuleID     string `json:"rule_id"`
+	File       string `json:"file"`
+	SecretHash string `json:"secret_hash"`
+}
+
 // Metadata holds information about a single backup.
 type Metadata struct {
-	ID        string            `json:"id"`
-	Timestamp time.Time         `json:"timestamp"`
-	Providers []string          `json:"providers"`
-	GitCommit string            `json:"git_commit,omitempty"`
-	Labels    map[string]string `json:"labels,omitempty"`
+	ID        string                      `json:"id"`
+	Timestamp time.Time                   `json:"timestamp"`
+	Providers []string                    `json:"providers"`
+	GitCommit string                      `json:"git_commit,omitempty"`
+	Labels    map[string]string           `json:"labels,omitempty"`
+	Message   string                      `json:"message,omitempty"`
+	Encrypted bool                        `json:"encrypted"`
+	Findings  map[string][]FindingSummary `json:"findings,omitempty"`
 }
 
 // BackupEntry is a summary of a backup for listing purposes.
@@ -29,6 +41,9 @@ type BackupEntry struct {
 	ID        string
 	Timestamp time.Time
 	Providers []string
+	Labels    map[string]string
+	Message   string
+	Encrypted bool
 }
 
 // Storage is the interface for backup storage backends.
@@ -148,6 +163,9 @@ func (s *localStorage) List() ([]BackupEntry, error) {
 			ID:        meta.ID,
 			Timestamp: meta.Timestamp,
 			Providers: meta.Providers,
+			Labels:    meta.Labels,
+			Message:   meta.Message,
+			Encrypted: meta.Encrypted,
 		})
 	}
 
