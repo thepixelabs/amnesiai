@@ -23,8 +23,12 @@ type Config struct {
 	BackupDir   string    `mapstructure:"backup_dir"`   // absolute path for backups
 	Providers   []string  `mapstructure:"providers"`    // ["claude","gemini","copilot","codex"] or subset
 	GitRemote   GitRemote `mapstructure:"git_remote"`
-	AutoCommit  bool      `mapstructure:"auto_commit"` // true=commit automatically
-	AutoPush    bool      `mapstructure:"auto_push"`   // true=push automatically (git-remote only)
+	AutoCommit  bool      `mapstructure:"auto_commit"`  // true=commit automatically
+	AutoPush    bool      `mapstructure:"auto_push"`    // true=push automatically (git-remote only)
+	BackupCount int       `mapstructure:"backup_count"` // total successful backups taken
+	FirstRun    bool      `mapstructure:"first_run"`    // true until first successful backup
+	VerboseHelp bool      `mapstructure:"verbose_help"` // show extended help text
+	Telemetry   bool      `mapstructure:"telemetry"`    // opt-in usage telemetry
 }
 
 // DefaultProviders returns the full list of supported provider names.
@@ -42,8 +46,12 @@ func DefaultConfig() Config {
 		GitRemote: GitRemote{
 			Branch: "main",
 		},
-		AutoCommit: true,
-		AutoPush:   false,
+		AutoCommit:  true,
+		AutoPush:    false,
+		BackupCount: 0,
+		FirstRun:    true,
+		VerboseHelp: false,
+		Telemetry:   false,
 	}
 }
 
@@ -79,6 +87,10 @@ func Load(v *viper.Viper) (Config, error) {
 	v.SetDefault("git_remote.branch", defaults.GitRemote.Branch)
 	v.SetDefault("auto_commit", defaults.AutoCommit)
 	v.SetDefault("auto_push", defaults.AutoPush)
+	v.SetDefault("backup_count", 0)
+	v.SetDefault("first_run", true)
+	v.SetDefault("verbose_help", false)
+	v.SetDefault("telemetry", false)
 
 	// Unmarshal into a zero-value struct so that viper's effective value for
 	// each key (file > env > default) is written without interference from
@@ -93,6 +105,33 @@ func Load(v *viper.Viper) (Config, error) {
 	return cfg, nil
 }
 
+// SaveTo writes the configuration to the specified file path.
+// The parent directory must already exist.  The file is written with 0600
+// permissions to prevent other users from reading sensitive values.
+func SaveTo(cfg Config, cfgPath string) error {
+	v := viper.New()
+	v.Set("storage_mode", cfg.StorageMode)
+	v.Set("backup_dir", cfg.BackupDir)
+	v.Set("providers", cfg.Providers)
+	v.Set("git_remote.url", cfg.GitRemote.URL)
+	v.Set("git_remote.branch", cfg.GitRemote.Branch)
+	v.Set("auto_commit", cfg.AutoCommit)
+	v.Set("auto_push", cfg.AutoPush)
+	v.Set("backup_count", cfg.BackupCount)
+	v.Set("first_run", cfg.FirstRun)
+	v.Set("verbose_help", cfg.VerboseHelp)
+	v.Set("telemetry", cfg.Telemetry)
+
+	if err := v.WriteConfigAs(cfgPath); err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+	// Ensure config file has restrictive permissions.
+	if err := os.Chmod(cfgPath, 0600); err != nil {
+		return fmt.Errorf("failed to set config permissions: %w", err)
+	}
+	return nil
+}
+
 // Save writes the configuration to ~/.amnesiai/config.toml.
 func Save(cfg Config) error {
 	dir, err := ConfigDir()
@@ -102,25 +141,7 @@ func Save(cfg Config) error {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("cannot create config directory: %w", err)
 	}
-
-	v := viper.New()
-	v.Set("storage_mode", cfg.StorageMode)
-	v.Set("backup_dir", cfg.BackupDir)
-	v.Set("providers", cfg.Providers)
-	v.Set("git_remote.url", cfg.GitRemote.URL)
-	v.Set("git_remote.branch", cfg.GitRemote.Branch)
-	v.Set("auto_commit", cfg.AutoCommit)
-	v.Set("auto_push", cfg.AutoPush)
-
-	cfgPath := filepath.Join(dir, "config.toml")
-	if err := v.WriteConfigAs(cfgPath); err != nil {
-		return fmt.Errorf("failed to write config: %w", err)
-	}
-	// Ensure config file has restrictive permissions.
-	if err := os.Chmod(cfgPath, 0600); err != nil {
-		return fmt.Errorf("failed to set config permissions: %w", err)
-	}
-	return nil
+	return SaveTo(cfg, filepath.Join(dir, "config.toml"))
 }
 
 // Validate checks that the config values are coherent.

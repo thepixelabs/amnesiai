@@ -2,10 +2,12 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/thepixelabs/amnesiai/internal/config"
 	"github.com/thepixelabs/amnesiai/internal/core"
 )
 
@@ -24,6 +26,21 @@ func init() {
 	backupCmd.Flags().String("message", "", "commit message override (default: auto-generated)")
 
 	rootCmd.AddCommand(backupCmd)
+}
+
+// incrementBackupCount loads config, bumps BackupCount, clears FirstRun once the
+// first backup has completed, and saves.  Errors are logged but do not fail the
+// backup — the data is already on disk.
+func incrementBackupCount() {
+	updatedCfg := cfg
+	updatedCfg.BackupCount++
+	if updatedCfg.FirstRun && updatedCfg.BackupCount >= 1 {
+		updatedCfg.FirstRun = false
+	}
+	if err := config.Save(updatedCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not update backup_count: %v\n", err)
+	}
+	cfg = updatedCfg
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
@@ -47,7 +64,6 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 
 	message, _ := cmd.Flags().GetString("message")
-	_ = message // Will be used when git commit support is added.
 
 	opts := core.BackupOptions{
 		Providers:  providers,
@@ -70,6 +86,8 @@ func runBackup(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: %d secret(s) redacted in %s\n", len(findings), provName)
 		}
 	}
+
+	incrementBackupCount()
 
 	return nil
 }

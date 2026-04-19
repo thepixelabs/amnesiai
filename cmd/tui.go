@@ -601,6 +601,8 @@ func (ui *legacyUI) backupFlow() error {
 		return nil
 	}
 
+	incrementBackupCount()
+
 	tuiClearScreen()
 	tuiPrintSubHeader("Backup complete")
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("ID:"), result.ID)
