@@ -1,12 +1,17 @@
 package core
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/thepixelabs/amnesiai/internal/crypto"
 	"github.com/thepixelabs/amnesiai/internal/provider"
 	"github.com/thepixelabs/amnesiai/internal/storage"
 )
+
+// redactedMarker is the prefix written by scan.Scan for every redacted secret.
+// We look for this literal string in restored file bytes to warn the user.
+const redactedMarker = "<REDACTED:"
 
 // RestoreOptions controls the restore operation.
 type RestoreOptions struct {
@@ -18,10 +23,12 @@ type RestoreOptions struct {
 
 // RestoreResult holds the outcome of a restore operation.
 type RestoreResult struct {
-	BackupID  string
-	Providers []string
-	DryRun    bool
-	Files     int // number of files restored
+	BackupID          string
+	Providers         []string
+	DryRun            bool
+	Files             int      // number of files restored
+	UnencryptedBackup bool     // true if the source backup was not encrypted
+	PlaceholderFiles  []string // archive paths of files that contain <REDACTED: markers
 }
 
 // Restore loads a backup from storage, decrypts it, extracts the archive,
@@ -77,16 +84,28 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		providerSnapshots[entry.Provider][entry.OrigPath] = data
 	}
 
+	// Scan all files-to-restore for <REDACTED: markers so we can warn the user
+	// post-restore. Do this before the dry-run branch so it also works there.
+	var placeholderFiles []string
+	marker := []byte(redactedMarker)
+	for archPath, data := range archiveFiles {
+		if bytes.Contains(data, marker) {
+			placeholderFiles = append(placeholderFiles, archPath)
+		}
+	}
+
 	if opts.DryRun {
 		fileCount := 0
 		for _, snap := range providerSnapshots {
 			fileCount += len(snap)
 		}
 		return &RestoreResult{
-			BackupID:  backupID,
-			Providers: restoreProviders,
-			DryRun:    true,
-			Files:     fileCount,
+			BackupID:          backupID,
+			Providers:         restoreProviders,
+			DryRun:            true,
+			Files:             fileCount,
+			UnencryptedBackup: !meta.Encrypted,
+			PlaceholderFiles:  placeholderFiles,
 		}, nil
 	}
 
@@ -104,10 +123,12 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 	}
 
 	return &RestoreResult{
-		BackupID:  backupID,
-		Providers: restoreProviders,
-		DryRun:    false,
-		Files:     totalFiles,
+		BackupID:          backupID,
+		Providers:         restoreProviders,
+		DryRun:            false,
+		Files:             totalFiles,
+		UnencryptedBackup: !meta.Encrypted,
+		PlaceholderFiles:  placeholderFiles,
 	}, nil
 }
 

@@ -608,9 +608,17 @@ func (ui *legacyUI) backupFlow() error {
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("ID:"), result.ID)
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Providers:"), strings.Join(result.Providers, ", "))
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Timestamp:"), result.Timestamp.Format("2006-01-02 15:04:05 UTC"))
+	encrypted := opts.Passphrase != ""
 	for provName, findings := range result.Findings {
-		if len(findings) > 0 {
-			fmt.Printf("%s %d secret(s) redacted in %s\n", tuiWarnStyle.Render("Warning:"), len(findings), provName)
+		if len(findings) == 0 {
+			continue
+		}
+		if encrypted {
+			fmt.Printf("%s %d secret(s) found in %s (encrypted in archive)\n",
+				tuiWarnStyle.Render("Warning:"), len(findings), provName)
+		} else {
+			fmt.Printf("%s %d secret(s) REDACTED in %s (archive is UNENCRYPTED)\n",
+				tuiWarnStyle.Render("Warning:"), len(findings), provName)
 		}
 	}
 	tuiPause(ui.reader())

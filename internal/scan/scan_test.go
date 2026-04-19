@@ -66,6 +66,81 @@ func TestScan_CleanContentPassesThroughUnchanged(t *testing.T) {
 	}
 }
 
+// TestScanReport_DataUnmodifiedFindingsPopulated verifies that ScanReport
+// returns findings without altering the input bytes.
+func TestScanReport_DataUnmodifiedFindingsPopulated(t *testing.T) {
+	input := []byte("ACCESS_KEY_ID=AKIA1234567890ABCDEF\nregion=us-east-1\n")
+
+	findings, err := scan.ScanReport("env", input)
+	if err != nil {
+		t.Fatalf("ScanReport: unexpected error: %v", err)
+	}
+
+	if len(findings) == 0 {
+		t.Fatal("expected at least one finding, got none")
+	}
+
+	// Rule ID must be present.
+	found := false
+	for _, f := range findings {
+		if f.Type == "aws-access-token" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected finding with Type %q; got: %+v", "aws-access-token", findings)
+	}
+
+	// Original data must be byte-for-byte identical.
+	if string(input) != "ACCESS_KEY_ID=AKIA1234567890ABCDEF\nregion=us-east-1\n" {
+		t.Errorf("ScanReport modified the input data: %q", input)
+	}
+
+	// The raw key must still be present in input (not redacted).
+	if !bytes.Contains(input, []byte("AKIA1234567890ABCDEF")) {
+		t.Errorf("ScanReport unexpectedly removed the raw key from input data")
+	}
+}
+
+// TestScanReport_CleanContentReturnsNilFindings verifies that clean content
+// produces no findings and the error is nil.
+func TestScanReport_CleanContentReturnsNilFindings(t *testing.T) {
+	input := []byte(`{"theme": "dark"}`)
+
+	findings, err := scan.ScanReport("settings.json", input)
+	if err != nil {
+		t.Fatalf("ScanReport: unexpected error: %v", err)
+	}
+	if len(findings) != 0 {
+		t.Errorf("expected no findings for clean content, got: %+v", findings)
+	}
+}
+
+// TestScanReport_FindingOffsetMatchesSecret verifies that StartByte/EndByte in the
+// returned Finding correctly delimit the secret within the original data.
+func TestScanReport_FindingOffsetMatchesSecret(t *testing.T) {
+	const key = "AKIA1234567890ABCDEF"
+	input := []byte("ACCESS_KEY_ID=" + key)
+
+	findings, err := scan.ScanReport("env", input)
+	if err != nil {
+		t.Fatalf("ScanReport: %v", err)
+	}
+	if len(findings) == 0 {
+		t.Fatal("expected findings, got none")
+	}
+
+	f := findings[0]
+	if f.StartByte < 0 || f.EndByte > len(input) || f.StartByte >= f.EndByte {
+		t.Fatalf("finding offsets out of range: start=%d end=%d len=%d", f.StartByte, f.EndByte, len(input))
+	}
+
+	extracted := string(input[f.StartByte:f.EndByte])
+	if extracted != key {
+		t.Errorf("extracted secret %q != expected %q using offsets [%d:%d]", extracted, key, f.StartByte, f.EndByte)
+	}
+}
+
 // TestScan_IdempotentOnAlreadyRedactedContent verifies that scanning content
 // that already contains a redaction placeholder does not produce additional
 // redactions or double-wrap the placeholder.

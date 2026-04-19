@@ -507,6 +507,162 @@ func TestBackup_MetadataProvidersMatchActualProviders(t *testing.T) {
 	}
 }
 
+// ----------------------------------------------------------------------------
+// Security model tests (Track B)
+// ----------------------------------------------------------------------------
+
+// TestBackupWithEncryption_SecretsAreLossless verifies that when encryption is on
+// and gitleaks finds a secret, the raw bytes are stored verbatim in the archive
+// (i.e. no <REDACTED:...> substitution). The archive is encrypted, so the secret
+// is protected by the passphrase.
+func TestBackupWithEncryption_SecretsAreLossless(t *testing.T) {
+	const passphrase = "lossless-passphrase"
+	const key = "AKIA1234567890ABCDEF"
+	store := newStore(t)
+
+	snap := map[string][]byte{
+		"config/env": []byte("ACCESS_KEY_ID=" + key + "\nregion=us-east-1\n"),
+	}
+	testMock.snapshot = snap
+	result, err := core.Backup(store, core.BackupOptions{
+		Providers:  []string{"testprovider"},
+		Passphrase: passphrase,
+	})
+	if err != nil {
+		t.Fatalf("Backup (encrypted): %v", err)
+	}
+
+	// Verify findings are reported.
+	findings, ok := result.Findings["testprovider"]
+	if !ok || len(findings) == 0 {
+		t.Fatalf("expected findings for encrypted backup, got: %v", result.Findings)
+	}
+
+	// Decrypt and extract — the raw key must survive intact.
+	files, _ := loadDecryptExtract(t, store, result.ID, passphrase)
+	content, ok := files["testprovider/config/env"]
+	if !ok {
+		t.Fatal("archive missing testprovider/config/env after decrypt+extract")
+	}
+	if !strings.Contains(string(content), key) {
+		t.Errorf("encrypted archive does NOT contain the raw key — lossless invariant broken; got: %q", content)
+	}
+	if strings.Contains(string(content), "<REDACTED:") {
+		t.Errorf("encrypted archive contains <REDACTED:> placeholder — should be lossless; got: %q", content)
+	}
+}
+
+// TestBackupNoEncryptForceNoEncrypt_RedactionPresent verifies that when
+// --no-encrypt + --force-no-encrypt are both set, the backup succeeds with
+// <REDACTED:...> placeholders in the archive and findings are reported.
+func TestBackupNoEncryptForceNoEncrypt_RedactionPresent(t *testing.T) {
+	const key = "AKIA1234567890ABCDEF"
+	store := newStore(t)
+
+	snap := map[string][]byte{
+		"config/env": []byte("ACCESS_KEY_ID=" + key + "\nregion=us-east-1\n"),
+	}
+	testMock.snapshot = snap
+	result, err := core.Backup(store, core.BackupOptions{
+		Providers:      []string{"testprovider"},
+		Passphrase:     "",
+		NoEncrypt:      true,
+		ForceNoEncrypt: true,
+	})
+	if err != nil {
+		t.Fatalf("Backup (force-no-encrypt): %v", err)
+	}
+
+	files, _ := loadAndExtract(t, store, result.ID)
+	content, ok := files["testprovider/config/env"]
+	if !ok {
+		t.Fatal("archive missing testprovider/config/env")
+	}
+	// Raw key must be gone.
+	if strings.Contains(string(content), key) {
+		t.Errorf("unencrypted archive still contains raw key: %q", content)
+	}
+	// Placeholder must be present.
+	if !strings.Contains(string(content), "<REDACTED:") {
+		t.Errorf("unencrypted archive missing <REDACTED:> placeholder: %q", content)
+	}
+}
+
+// TestBackupNoEncrypt_SecretsFound_ReturnsError verifies that when --no-encrypt
+// is set and secrets are found, Backup returns a non-nil error and no backup is
+// written to storage (unless --force-no-encrypt is also set).
+func TestBackupNoEncrypt_SecretsFound_ReturnsError(t *testing.T) {
+	store := newStore(t)
+
+	snap := map[string][]byte{
+		"config/env": []byte("ACCESS_KEY_ID=AKIA1234567890ABCDEF"),
+	}
+	testMock.snapshot = snap
+	_, err := core.Backup(store, core.BackupOptions{
+		Providers:      []string{"testprovider"},
+		Passphrase:     "",
+		NoEncrypt:      true,
+		ForceNoEncrypt: false, // must NOT be set for guard to trigger
+	})
+	if err == nil {
+		t.Fatal("expected error when --no-encrypt and secrets found without --force-no-encrypt, got nil")
+	}
+
+	// Verify no backup was written to storage.
+	entries, listErr := store.List()
+	if listErr != nil {
+		t.Fatalf("store.List: %v", listErr)
+	}
+	if len(entries) != 0 {
+		t.Errorf("expected no backups in storage after guard error; got %d entry/entries", len(entries))
+	}
+}
+
+// TestBackupStoredFindings_PopulatedInMetadata verifies that after a backup,
+// storage.Metadata.Findings contains a FindingSummary entry with the correct
+// RuleID, File, and a non-empty SecretHash for every detected secret.
+func TestBackupStoredFindings_PopulatedInMetadata(t *testing.T) {
+	const key = "AKIA1234567890ABCDEF"
+	store := newStore(t)
+
+	snap := map[string][]byte{
+		"config/env": []byte("ACCESS_KEY_ID=" + key),
+	}
+	testMock.snapshot = snap
+	result, err := core.Backup(store, core.BackupOptions{
+		Providers:  []string{"testprovider"},
+		Passphrase: "meta-passphrase",
+	})
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+
+	meta, _, err := store.Load(result.ID)
+	if err != nil {
+		t.Fatalf("store.Load: %v", err)
+	}
+
+	summaries, ok := meta.Findings["testprovider"]
+	if !ok || len(summaries) == 0 {
+		t.Fatalf("expected Findings in metadata for testprovider, got: %v", meta.Findings)
+	}
+
+	s := summaries[0]
+	if s.RuleID != "aws-access-token" {
+		t.Errorf("FindingSummary.RuleID = %q, want %q", s.RuleID, "aws-access-token")
+	}
+	if s.File != "config/env" {
+		t.Errorf("FindingSummary.File = %q, want %q", s.File, "config/env")
+	}
+	if s.SecretHash == "" {
+		t.Error("FindingSummary.SecretHash is empty; expected hex SHA-256 of the raw secret")
+	}
+	// SHA-256 produces 32 bytes → 64 hex characters.
+	if len(s.SecretHash) != 64 {
+		t.Errorf("SecretHash length = %d, want 64 (hex SHA-256)", len(s.SecretHash))
+	}
+}
+
 // TestBackup_EmptyProviderSnapshotProducesValidArchive verifies that a provider
 // returning zero files still produces a valid (though empty) archive rather than
 // an error.
