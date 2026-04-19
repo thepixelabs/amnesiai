@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 
+	xterm "github.com/charmbracelet/x/term"
 	"github.com/spf13/cobra"
 
 	"github.com/thepixelabs/amnesiai/internal/config"
@@ -64,12 +65,16 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 
 	message, _ := cmd.Flags().GetString("message")
+	noEncrypt := getNoEncrypt(cmd)
+	forceNoEncrypt := getForceNoEncrypt(cmd)
 
 	opts := core.BackupOptions{
-		Providers:  providers,
-		Passphrase: getPassphrase(cmd),
-		Labels:     labels,
-		Message:    message,
+		Providers:      providers,
+		Passphrase:     getPassphrase(cmd),
+		Labels:         labels,
+		Message:        message,
+		NoEncrypt:      noEncrypt,
+		ForceNoEncrypt: forceNoEncrypt,
 	}
 
 	result, err := core.Backup(store, opts)
@@ -81,9 +86,38 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Providers: %s\n", strings.Join(result.Providers, ", "))
 	fmt.Fprintf(cmd.OutOrStdout(), "Timestamp: %s\n", result.Timestamp.Format("2006-01-02 15:04:05 UTC"))
 
+	encrypted := opts.Passphrase != ""
+	isTTY := xterm.IsTerminal(os.Stdout.Fd())
+
 	for provName, findings := range result.Findings {
-		if len(findings) > 0 {
-			fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: %d secret(s) redacted in %s\n", len(findings), provName)
+		if len(findings) == 0 {
+			continue
+		}
+		// Summary line — always printed.
+		if encrypted {
+			fmt.Fprintf(cmd.ErrOrStderr(),
+				"WARNING: %d secret(s) found in %s (encrypted in archive)",
+				len(findings), provName)
+		} else {
+			fmt.Fprintf(cmd.ErrOrStderr(),
+				"WARNING: %d secret(s) REDACTED in %s (archive is UNENCRYPTED)",
+				len(findings), provName)
+		}
+
+		// Only show the detail hint and per-rule breakdown when stdout is a TTY.
+		// When piped/redirected we must not leak file paths + rule IDs (S1/Q3).
+		if isTTY {
+			fmt.Fprintf(cmd.ErrOrStderr(), " [pass -d for details]\n")
+			// Group findings by rule ID for a compact display.
+			ruleCount := make(map[string]int)
+			for _, f := range findings {
+				ruleCount[f.Type]++
+			}
+			for ruleID, count := range ruleCount {
+				fmt.Fprintf(cmd.ErrOrStderr(), "  %dx %s\n", count, ruleID)
+			}
+		} else {
+			fmt.Fprintf(cmd.ErrOrStderr(), "\n")
 		}
 	}
 
