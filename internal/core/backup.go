@@ -6,11 +6,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -22,10 +23,12 @@ import (
 
 // BackupOptions controls the backup operation.
 type BackupOptions struct {
-	Providers  []string          // provider names to back up
-	Passphrase string            // encryption passphrase (empty = no encryption)
-	Labels     map[string]string // user-defined labels
-	Message    string            // optional commit message override
+	Providers      []string          // provider names to back up
+	Passphrase     string            // encryption passphrase (empty = no encryption)
+	Labels         map[string]string // user-defined labels
+	Message        string            // optional commit message override
+	NoEncrypt      bool              // true when caller explicitly opted out of encryption
+	ForceNoEncrypt bool              // suppresses the secrets-found guard when NoEncrypt is true
 }
 
 // BackupResult holds the outcome of a backup operation.
@@ -52,7 +55,16 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		return nil, fmt.Errorf("get providers: %w", err)
 	}
 
+	// findingSource carries original data alongside scan results so we can hash
+	// raw secret bytes when building storage.FindingSummary entries.
+	type findingSource struct {
+		relPath  string
+		origData []byte
+		findings []scan.Finding
+	}
+
 	allFindings := make(map[string][]scan.Finding)
+	allFindingData := make(map[string][]findingSource)
 
 	// Collect and scan data from all providers.
 	// Track the names of providers that were actually resolved (may differ from
@@ -69,23 +81,87 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		}
 
 		for path, data := range snapshot {
-			// Scan for secrets before archiving.
-			redacted, findings, scanErr := scan.Scan(path, data)
-			if scanErr != nil {
-				// Warn loudly: the user must know secrets may not be redacted.
-				fmt.Fprintf(os.Stderr, "WARNING: secret scan failed for %s/%s: %v — file included unscanned\n",
-					p.Name(), path, scanErr)
-				redacted = data
+			var archiveData []byte
+			var findings []scan.Finding
+
+			if opts.Passphrase != "" {
+				// Encryption is on: keep raw bytes, only report findings.
+				var scanErr error
+				findings, scanErr = scan.ScanReport(path, data)
+				if scanErr != nil {
+					// Fail closed: a scan init failure is a hard error when encryption
+					// is on. We cannot guarantee the archive is safe to produce.
+					return nil, fmt.Errorf("secret scan failed for %s/%s (backup aborted): %w",
+						p.Name(), path, scanErr)
+				}
+				archiveData = data
+			} else {
+				// No encryption: redact secrets so they are not stored in plaintext.
+				var redacted []byte
+				var scanErr error
+				redacted, findings, scanErr = scan.Scan(path, data)
+				if scanErr != nil {
+					// Fail closed: cannot guarantee secrets are redacted.
+					return nil, fmt.Errorf("secret scan failed for %s/%s (backup aborted): %w",
+						p.Name(), path, scanErr)
+				}
+				archiveData = redacted
 			}
+
 			if len(findings) > 0 {
 				allFindings[p.Name()] = append(allFindings[p.Name()], findings...)
+				allFindingData[p.Name()] = append(allFindingData[p.Name()], findingSource{
+					relPath:  path,
+					origData: data, // original, pre-redaction bytes for hashing
+					findings: findings,
+				})
 			}
 
 			files = append(files, fileEntry{
 				providerName: p.Name(),
 				path:         path,
-				data:         redacted,
+				data:         archiveData,
 			})
+		}
+	}
+
+	// Security guard S2: when the caller opted out of encryption, refuse to
+	// proceed if secrets were found unless --force-no-encrypt is also set.
+	if opts.NoEncrypt && !opts.ForceNoEncrypt {
+		totalSecrets := 0
+		for _, fs := range allFindings {
+			totalSecrets += len(fs)
+		}
+		if totalSecrets > 0 {
+			return nil, fmt.Errorf(
+				"%d secret(s) detected in provider files; refusing to create an unencrypted archive "+
+					"(use --force-no-encrypt to override, or remove --no-encrypt to encrypt)",
+				totalSecrets,
+			)
+		}
+	}
+
+	// Build storage findings: RuleID, relative path, and hex SHA-256 of the raw
+	// secret bytes. The secret itself is never stored.
+	var storedFindings map[string][]storage.FindingSummary
+	if len(allFindingData) > 0 {
+		storedFindings = make(map[string][]storage.FindingSummary)
+		for provName, sources := range allFindingData {
+			for _, src := range sources {
+				for _, f := range src.findings {
+					var secretHash string
+					if f.StartByte >= 0 && f.EndByte <= len(src.origData) && f.StartByte < f.EndByte {
+						raw := src.origData[f.StartByte:f.EndByte]
+						sum := sha256.Sum256(raw)
+						secretHash = hex.EncodeToString(sum[:])
+					}
+					storedFindings[provName] = append(storedFindings[provName], storage.FindingSummary{
+						RuleID:     f.Type,
+						File:       src.relPath,
+						SecretHash: secretHash,
+					})
+				}
+			}
 		}
 	}
 
@@ -111,6 +187,7 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		Labels:    opts.Labels,
 		Message:   opts.Message,
 		Encrypted: opts.Passphrase != "",
+		Findings:  storedFindings,
 	}
 
 	// Save to storage.
