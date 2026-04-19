@@ -1,3 +1,46 @@
+## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.4...v1.1.0) (2026-04-19)
+
+### Added
+
+* **First-run onboarding wizard** — on first launch, `amnesiai` walks you through storage mode, git provider, backup directory, default providers, encryption default, and auto-commit/push toggles. Re-trigger at any time with `amnesiai --settings` or via the Settings menu in the TUI.
+* **`--settings` flag** — re-runs the onboarding wizard without entering the main TUI.
+* **`--passphrase-fd <int>` flag** — reads the passphrase from the given file descriptor. Use this in scripts instead of passing the passphrase in argv.
+* **`--force-no-encrypt` flag** — required to skip encryption when gitleaks detects secrets. Explicit opt-in to the unsafe/lossy path.
+* **`git-local` storage mode** — local git repo with full commit history, never pushes.
+* **`git-remote` storage mode** — commit + push via `gh` (GitHub) or `glab` (GitLab) CLI with multi-account support. Account binding is stored in `~/.amnesiai/state.json`.
+* **Private-repo enforcement** — `git-remote` mode checks repo visibility before every push and aborts if the repo is public.
+* **`gh repo create` support** — create a new private repo from the onboarding wizard without leaving the TUI.
+* **Telemetry config key** — `telemetry = true` in `config.toml` enables local usage counts written to `~/.amnesiai/metrics.json`. Nothing is transmitted. Off by default.
+* **New config keys:** `first_run`, `backup_count`, `verbose_help`, `telemetry` (see README Config reference).
+* **`state.json`** — `~/.amnesiai/state.json` now holds runtime state (git account bindings, onboarding markers) separately from user config in `config.toml`.
+* **Contextual help in TUI** — help tips auto-show for first 3 backups (`backup_count` gate) and collapse automatically after.
+* **`?` help screen** — includes "Install shell completion" submenu. Completion help is no longer in the main menu.
+
+### Changed
+
+* **Encryption model (see Breaking):** when encryption is on, gitleaks scans files but does not modify them — raw bytes go into the encrypted archive. Restore is now fully lossless.
+* **TUI redesign:** new header with `thin` figlet font and ocean cyan→blue gradient, version chip with async upgrade hint, single-letter hotkeys (`b`/`r`/`d`/`l`/`?`/`q`), arrow-key provider picker with `·` middle-dot selection markers, two-field passphrase entry with `·` masking and confirm field, label step with `?`-toggle help.
+* **Claude provider backup scope tightened:** `~/.claude/todos/`, `~/.claude/ide/`, and `~/.claude/settings.local.json` are no longer backed up (PII / machine-local / credential risk). See `docs/backup-scope-policy.md` for the full scope rationale.
+* `--no-encrypt` is now refused when gitleaks detects secrets. Use `--force-no-encrypt` to proceed.
+
+### Fixed
+
+* Restoring an encrypted 1.0.x backup no longer silently writes `<REDACTED:...>` placeholders over real config values — the redaction-before-encryption bug is fixed by the new encryption model.
+
+### Security
+
+* **Secret scanning no longer corrupts restores.** Previously, gitleaks-redacted bytes entered the encrypted archive, meaning restores wrote `<REDACTED:type>` placeholders in place of real values — a silent data-loss bug. Secrets are now encrypted in place; no redaction occurs before the archive is sealed.
+* **`--passphrase` flag removed** — it exposed the passphrase via `argv` and shell history. Use `AMNESIAI_PASSPHRASE` env var or `--passphrase-fd`.
+* **`--force-no-encrypt` required to bypass encryption when secrets are present** — removes the silent lossy path that `--no-encrypt` previously allowed.
+
+### Breaking
+
+* **`--passphrase` flag removed.** Scripts that passed `--passphrase` must switch to `AMNESIAI_PASSPHRASE` or `--passphrase-fd`. See [Upgrading from 1.0.x](docs/migration-1.1.md).
+* **Redaction model changed.** Backups created with 1.0.x under encryption may contain `<REDACTED:...>` placeholders in the archive. Re-backup after upgrading to get lossless archives. See [Upgrading from 1.0.x](docs/migration-1.1.md).
+* **Claude provider no longer backs up** `~/.claude/todos/`, `~/.claude/ide/`, or `~/.claude/settings.local.json`.
+
+---
+
 ## [1.0.4](https://github.com/thepixelabs/amnesiai/compare/v1.0.3...v1.0.4) (2026-04-17)
 
 ### Performance Improvements
