@@ -12,14 +12,17 @@ import (
 // populateFakeCodexDir creates a directory structure that mirrors ~/.codex/.
 //
 //	<base>/
-//	  config.json          <-- must be included
-//	  instructions.md      <-- must be included
-//	  themes/
-//	    monokai.json        <-- must be included
-//	  ignored_dir/         <-- excluded: not in allowlist
+//	  agents/
+//	    coder.toml           <-- must be included
+//	    reviewer.toml        <-- must be included
+//	    not_a_toml.json      <-- excluded: not .toml
+//	  rules/
+//	    default.rules        <-- must be included
+//	    custom.rules         <-- excluded: not in allowedRulesFiles
+//	  other_dir/             <-- excluded: not in allowlist
 //	    state.json
-//	  auth_token.key        <-- excluded: ends with ".key"
-//	  credentials.json      <-- excluded: contains "credential"
+//	  auth_token.key         <-- excluded: ends with ".key"
+//	  credentials.json       <-- excluded: not in allowlist
 func populateFakeCodexDir(t *testing.T, base string) {
 	t.Helper()
 	mustWrite := func(path, content string) {
@@ -32,17 +35,18 @@ func populateFakeCodexDir(t *testing.T, base string) {
 		}
 	}
 
-	mustWrite(filepath.Join(base, "config.json"), `{"model":"gpt-4"}`)
-	mustWrite(filepath.Join(base, "instructions.md"), "# Codex instructions")
-	mustWrite(filepath.Join(base, "themes", "monokai.json"), `{"fg":"#f8f8f2"}`)
-	mustWrite(filepath.Join(base, "ignored_dir", "state.json"), `{}`)
+	mustWrite(filepath.Join(base, "agents", "coder.toml"), `[agent]\nmodel="o3"`)
+	mustWrite(filepath.Join(base, "agents", "reviewer.toml"), `[agent]\nmodel="o4-mini"`)
+	mustWrite(filepath.Join(base, "agents", "not_a_toml.json"), `{}`)
+	mustWrite(filepath.Join(base, "rules", "default.rules"), "# default rules")
+	mustWrite(filepath.Join(base, "rules", "custom.rules"), "# custom rules")
+	mustWrite(filepath.Join(base, "other_dir", "state.json"), `{}`)
 	mustWrite(filepath.Join(base, "auth_token.key"), "private key material")
 	mustWrite(filepath.Join(base, "credentials.json"), `{"api_key":"secret"}`)
 }
 
 // TestCodexDiscover_NonexistentDirReturnsNilNil verifies that Discover on a
-// directory that does not exist returns (nil, nil) and no error — the tool
-// is simply not installed.
+// directory that does not exist returns (nil, nil) — the tool is not installed.
 func TestCodexDiscover_NonexistentDirReturnsNilNil(t *testing.T) {
 	base := filepath.Join(t.TempDir(), "does-not-exist")
 	p := codex.NewWithBaseDir(base)
@@ -76,9 +80,9 @@ func TestCodexDiscover_ReturnsAllowedFilesAndExcludesOthers(t *testing.T) {
 	sort.Strings(rel)
 
 	want := []string{
-		"config.json",
-		"instructions.md",
-		filepath.Join("themes", "monokai.json"),
+		filepath.Join("agents", "coder.toml"),
+		filepath.Join("agents", "reviewer.toml"),
+		filepath.Join("rules", "default.rules"),
 	}
 	sort.Strings(want)
 
@@ -92,8 +96,8 @@ func TestCodexDiscover_ReturnsAllowedFilesAndExcludesOthers(t *testing.T) {
 	}
 }
 
-// TestCodexDiscover_ExcludesKeyAndCredentialFiles verifies the specific
-// exclusion rules for .key files and files containing "credential".
+// TestCodexDiscover_ExcludesKeyAndCredentialFiles verifies the exclusion rules
+// for .key files and non-allowlisted paths (credentials.json, other_dir/).
 func TestCodexDiscover_ExcludesKeyAndCredentialFiles(t *testing.T) {
 	base := t.TempDir()
 	populateFakeCodexDir(t, base)
@@ -109,13 +113,69 @@ func TestCodexDiscover_ExcludesKeyAndCredentialFiles(t *testing.T) {
 		if filepath.Ext(name) == ".key" {
 			t.Errorf("Discover returned a .key file: %s", path)
 		}
-		// "credentials.json" is in the top-level dir but not in the allowlist
-		// ("credentials" != "config.json" | "instructions.md" | "themes").
-		// The exclusion happens via the allowlist, not the name filter here,
-		// but we still assert it never appears.
 		if name == "credentials.json" {
 			t.Errorf("Discover returned credentials.json, which must be excluded")
 		}
+		if name == "not_a_toml.json" {
+			t.Errorf("Discover returned non-toml file from agents/: %s", path)
+		}
+		if name == "custom.rules" {
+			t.Errorf("Discover returned custom.rules, which is not in the rules allowlist")
+		}
+	}
+}
+
+// TestCodexDiscover_AgentsOnlyToml verifies that only .toml files are
+// returned from the agents/ directory.
+func TestCodexDiscover_AgentsOnlyToml(t *testing.T) {
+	base := t.TempDir()
+	populateFakeCodexDir(t, base)
+
+	p := codex.NewWithBaseDir(base)
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	for _, path := range paths {
+		rel, _ := filepath.Rel(base, path)
+		// Check that agents/ entries are .toml.
+		dir := filepath.Dir(rel)
+		if dir == "agents" && filepath.Ext(filepath.Base(rel)) != ".toml" {
+			t.Errorf("Discover returned non-.toml file from agents/: %s", rel)
+		}
+	}
+}
+
+// TestCodexDiscover_RulesOnlyDefaultRules verifies that only default.rules is
+// returned from the rules/ directory.
+func TestCodexDiscover_RulesOnlyDefaultRules(t *testing.T) {
+	base := t.TempDir()
+	populateFakeCodexDir(t, base)
+
+	p := codex.NewWithBaseDir(base)
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	for _, path := range paths {
+		rel, _ := filepath.Rel(base, path)
+		if filepath.Dir(rel) == "rules" && filepath.Base(rel) != "default.rules" {
+			t.Errorf("Discover returned unexpected rules file: %s", rel)
+		}
+	}
+
+	// default.rules must appear.
+	found := false
+	for _, path := range paths {
+		rel, _ := filepath.Rel(base, path)
+		if rel == filepath.Join("rules", "default.rules") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("Discover did not return rules/default.rules")
 	}
 }
 
@@ -156,9 +216,9 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		target := filepath.Join(base, "config.json")
-		if err := os.WriteFile(target, []byte(`{"model":"gpt-4o"}`), 0600); err != nil {
-			t.Fatalf("overwrite config.json: %v", err)
+		target := filepath.Join(base, "agents", "coder.toml")
+		if err := os.WriteFile(target, []byte(`[agent]\nmodel="o4"`), 0600); err != nil {
+			t.Fatalf("overwrite coder.toml: %v", err)
 		}
 
 		entries, err := p.Diff(snapshot)
@@ -167,15 +227,15 @@ func TestDiff_StatusCases(t *testing.T) {
 		}
 		found := false
 		for _, e := range entries {
-			if e.Path == "config.json" {
+			if e.Path == filepath.Join("agents", "coder.toml") {
 				found = true
 				if e.Status != "modified" {
-					t.Errorf("config.json: got status %q, want %q", e.Status, "modified")
+					t.Errorf("coder.toml: got status %q, want %q", e.Status, "modified")
 				}
 			}
 		}
 		if !found {
-			t.Error("Diff did not return an entry for config.json")
+			t.Error("Diff did not return an entry for modified agents/coder.toml")
 		}
 	})
 
@@ -189,10 +249,10 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		// themes/ is in the allowlist; a new .json inside it will be discovered.
-		newFile := filepath.Join(base, "themes", "dracula.json")
-		if err := os.WriteFile(newFile, []byte(`{"bg":"#282a36"}`), 0600); err != nil {
-			t.Fatalf("write dracula.json: %v", err)
+		// agents/ is in the allowlist; a new .toml inside it will be discovered.
+		newFile := filepath.Join(base, "agents", "planner.toml")
+		if err := os.WriteFile(newFile, []byte(`[agent]\nrole="planner"`), 0600); err != nil {
+			t.Fatalf("write planner.toml: %v", err)
 		}
 
 		entries, err := p.Diff(snapshot)
@@ -201,15 +261,15 @@ func TestDiff_StatusCases(t *testing.T) {
 		}
 		found := false
 		for _, e := range entries {
-			if e.Path == filepath.Join("themes", "dracula.json") {
+			if e.Path == filepath.Join("agents", "planner.toml") {
 				found = true
 				if e.Status != "added" {
-					t.Errorf("dracula.json: got status %q, want %q", e.Status, "added")
+					t.Errorf("planner.toml: got status %q, want %q", e.Status, "added")
 				}
 			}
 		}
 		if !found {
-			t.Error("Diff did not return an entry for newly added themes/dracula.json")
+			t.Error("Diff did not return an entry for newly added agents/planner.toml")
 		}
 	})
 
@@ -223,9 +283,9 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		target := filepath.Join(base, "config.json")
+		target := filepath.Join(base, "rules", "default.rules")
 		if err := os.Remove(target); err != nil {
-			t.Fatalf("remove config.json: %v", err)
+			t.Fatalf("remove default.rules: %v", err)
 		}
 
 		entries, err := p.Diff(snapshot)
@@ -234,22 +294,21 @@ func TestDiff_StatusCases(t *testing.T) {
 		}
 		found := false
 		for _, e := range entries {
-			if e.Path == "config.json" {
+			if e.Path == filepath.Join("rules", "default.rules") {
 				found = true
 				if e.Status != "deleted" {
-					t.Errorf("config.json: got status %q, want %q", e.Status, "deleted")
+					t.Errorf("default.rules: got status %q, want %q", e.Status, "deleted")
 				}
 			}
 		}
 		if !found {
-			t.Error("Diff did not return an entry for deleted config.json")
+			t.Error("Diff did not return an entry for deleted rules/default.rules")
 		}
 	})
 }
 
 // TestCodexRoundTrip_ReadThenRestoreProducesIdenticalFiles verifies the
-// read-then-restore round trip produces byte-for-byte identical output in a
-// different directory.
+// read-then-restore round trip produces byte-for-byte identical output.
 func TestCodexRoundTrip_ReadThenRestoreProducesIdenticalFiles(t *testing.T) {
 	srcDir := t.TempDir()
 	populateFakeCodexDir(t, srcDir)
@@ -278,6 +337,48 @@ func TestCodexRoundTrip_ReadThenRestoreProducesIdenticalFiles(t *testing.T) {
 		}
 		if string(gotData) != string(wantData) {
 			t.Errorf("%s: content mismatch\n  got:  %q\n  want: %q", rel, gotData, wantData)
+		}
+	}
+}
+
+// TestCodexRestore_RejectsNonAllowlistedPaths verifies that Restore silently
+// skips paths not in the allowlist (including top-level traversal attempts).
+func TestCodexRestore_RejectsNonAllowlistedPaths(t *testing.T) {
+	base := t.TempDir()
+	p := codex.NewWithBaseDir(base)
+
+	snapshot := map[string][]byte{
+		filepath.Join("agents", "ok.toml"):       []byte(`[agent]`),
+		filepath.Join("rules", "default.rules"):   []byte("# ok"),
+		filepath.Join("rules", "custom.rules"):    []byte("# should be skipped"),
+		"credentials.json":                        []byte(`{"key":"val"}`),
+		filepath.Join("other_dir", "state.json"):  []byte(`{}`),
+	}
+
+	if err := p.Restore(snapshot); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	// These must exist.
+	mustExist := []string{
+		filepath.Join(base, "agents", "ok.toml"),
+		filepath.Join(base, "rules", "default.rules"),
+	}
+	for _, path := range mustExist {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("Restore should have written %s but didn't: %v", path, err)
+		}
+	}
+
+	// These must NOT exist.
+	mustNotExist := []string{
+		filepath.Join(base, "rules", "custom.rules"),
+		filepath.Join(base, "credentials.json"),
+		filepath.Join(base, "other_dir", "state.json"),
+	}
+	for _, path := range mustNotExist {
+		if _, err := os.Stat(path); err == nil {
+			t.Errorf("Restore wrote %s but it must be skipped", path)
 		}
 	}
 }
