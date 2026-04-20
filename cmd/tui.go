@@ -564,9 +564,6 @@ func runOnboardingFlow() error {
 
 	// Load and update state.
 	st, _ := config.LoadState()
-	if st == nil {
-		st, _ = config.LoadState() // second try after potential dir creation
-	}
 	if st != nil {
 		st.OnboardingLastSeenVersion = version.Version
 		_ = st.Save()

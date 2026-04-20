@@ -9,6 +9,13 @@
 // tea.WithAltScreen so that the user can scroll back to read earlier prompts.
 // When the wizard exits it returns a WizardResult the caller uses to persist
 // choices to config and state.
+//
+// # Storage mode
+//
+// The wizard offers only "local" and "git-local".  The "git-remote" mode
+// requires creating a remote repository and authenticating via gh/glab, which
+// is handled by `amnesiai init --mode git-remote` (Track F).  A hint line
+// directs users there.
 package tui
 
 import (
@@ -17,30 +24,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-)
-
-// ─── Palette reused from the main TUI (defined here so this package compiles
-// standalone — callers in cmd/ wire the colour constants via lipgloss directly).
-
-const (
-	wCyan      = "#00d7ff"
-	wBlue      = "#005fd7"
-	wIndigoHex = "#8787ff"
-	wGreen     = "#5faf5f"
-	wAmber     = "#ffaf00"
-	wDim       = "#585858"
-	wWhite     = "#d0d0d0"
-)
-
-var (
-	wAccent  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wCyan))
-	wIndigo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wIndigoHex))
-	wSuccess = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wGreen))
-	wWarn    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wAmber))
-	wMuted   = lipgloss.NewStyle().Foreground(lipgloss.Color(wDim))
-	wNormal  = lipgloss.NewStyle().Foreground(lipgloss.Color(wWhite))
-	wPrompt  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wCyan))
 )
 
 // ─── Result ───────────────────────────────────────────────────────────────────
@@ -52,13 +35,13 @@ type WizardResult struct {
 	// False means ctrl+c was pressed mid-wizard.
 	Completed bool
 
-	// StorageMode is one of "local", "git-local", "git-remote".
+	// StorageMode is one of "local", "git-local".
+	// "git-remote" is not offered here — use `amnesiai init --mode git-remote`.
 	StorageMode string
 
-	// RemoteHost is "github" or "gitlab" (only set when StorageMode == "git-remote").
-	RemoteHost string
-
-	// RemoteAccount is the authenticated account chosen for git-remote (may be "").
+	// RemoteHost and RemoteAccount are reserved for Track F; always empty from
+	// the wizard in v1.1.x.
+	RemoteHost    string
 	RemoteAccount string
 
 	// Telemetry is false by default (our policy: off is the privacy-respecting default).
@@ -74,14 +57,41 @@ type wizardStep int
 
 const (
 	stepWelcome       wizardStep = iota // static info screen
-	stepStorageMode                     // pick local / git-local / git-remote
-	stepRemoteHost                      // pick github / gitlab  (git-remote only)
-	stepRemoteAccount                   // pick from discovered accounts
+	stepStorageMode                     // pick local / git-local
 	stepPassphraseNote                  // advisory — no choice needed
 	stepTelemetry                       // toggle on/off
 	stepFirstBackup                     // offer to run now
 	stepDone                            // sentinel
 )
+
+// ─── Async account-discovery messages ────────────────────────────────────────
+
+// accountsDiscoveredMsg carries the result of a background gh/glab probe.
+// It is intentionally kept for potential future use when git-remote is
+// re-introduced into the wizard (Track F).
+type accountsDiscoveredMsg struct {
+	host     string   // "github" or "gitlab"
+	accounts []string // may be empty
+	err      error    // non-nil if the CLI invocation failed
+}
+
+// discoverAccountsCmd returns a tea.Cmd that runs account discovery for the
+// given host in a goroutine and sends an accountsDiscoveredMsg when done.
+func discoverAccountsCmd(host string) tea.Cmd {
+	return func() tea.Msg {
+		var accounts []string
+		var err error
+		switch host {
+		case "github":
+			accounts, err = discoverGHAccounts()
+		case "gitlab":
+			accounts, err = discoverGlabAccounts()
+		default:
+			err = fmt.Errorf("unknown host %q", host)
+		}
+		return accountsDiscoveredMsg{host: host, accounts: accounts, err: err}
+	}
+}
 
 // ─── Model ────────────────────────────────────────────────────────────────────
 
@@ -93,9 +103,10 @@ type OnboardingModel struct {
 	width   int
 	aborted bool
 
-	// Discovered CLI accounts, populated lazily on stepRemoteHost.
+	// Discovered CLI accounts (reserved for Track F / future git-remote support).
 	ghAccounts   []string
 	glabAccounts []string
+	discovering  bool // true while a background discovery is in-flight
 }
 
 // NewOnboardingModel creates a fresh wizard model.
@@ -113,6 +124,19 @@ func (m OnboardingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		return m, nil
+
+	// Handle async account-discovery results.
+	case accountsDiscoveredMsg:
+		m.discovering = false
+		if msg.err == nil {
+			switch msg.host {
+			case "github":
+				m.ghAccounts = msg.accounts
+			case "gitlab":
+				m.glabAccounts = msg.accounts
+			}
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -147,47 +171,10 @@ func (m OnboardingModel) commit() (OnboardingModel, tea.Cmd) {
 		m.cursor = 0
 
 	case stepStorageMode:
-		modes := []string{"local", "git-local", "git-remote"}
+		// Only "local" and "git-local" are offered.  git-remote requires
+		// `amnesiai init --mode git-remote` (Track F).
+		modes := []string{"local", "git-local"}
 		m.result.StorageMode = modes[m.cursor]
-		if m.result.StorageMode == "git-remote" {
-			m.step = stepRemoteHost
-			// Discover accounts now so the next screen can render them.
-			m.ghAccounts = discoverGHAccounts()
-			m.glabAccounts = discoverGlabAccounts()
-		} else {
-			m.step = stepPassphraseNote
-		}
-		m.cursor = 0
-
-	case stepRemoteHost:
-		hosts := []string{"github", "gitlab"}
-		m.result.RemoteHost = hosts[m.cursor]
-		// Populate account list for the chosen host.
-		var accounts []string
-		if m.result.RemoteHost == "github" {
-			accounts = m.ghAccounts
-		} else {
-			accounts = m.glabAccounts
-		}
-		if len(accounts) > 0 {
-			m.step = stepRemoteAccount
-		} else {
-			// No accounts found — skip account selection, user will configure manually.
-			m.result.RemoteAccount = ""
-			m.step = stepPassphraseNote
-		}
-		m.cursor = 0
-
-	case stepRemoteAccount:
-		var accounts []string
-		if m.result.RemoteHost == "github" {
-			accounts = m.ghAccounts
-		} else {
-			accounts = m.glabAccounts
-		}
-		if m.cursor < len(accounts) {
-			m.result.RemoteAccount = accounts[m.cursor]
-		}
 		m.step = stepPassphraseNote
 		m.cursor = 0
 
@@ -217,14 +204,7 @@ func (m OnboardingModel) currentChoiceCount() int {
 	case stepWelcome:
 		return 1 // just "Continue"
 	case stepStorageMode:
-		return 3
-	case stepRemoteHost:
-		return 2
-	case stepRemoteAccount:
-		if m.result.RemoteHost == "github" {
-			return len(m.ghAccounts)
-		}
-		return len(m.glabAccounts)
+		return 2 // local, git-local
 	case stepPassphraseNote:
 		return 1
 	case stepTelemetry:
@@ -248,10 +228,6 @@ func (m OnboardingModel) View() string {
 		m.renderWelcome(&sb)
 	case stepStorageMode:
 		m.renderStorageMode(&sb)
-	case stepRemoteHost:
-		m.renderRemoteHost(&sb)
-	case stepRemoteAccount:
-		m.renderRemoteAccount(&sb)
 	case stepPassphraseNote:
 		m.renderPassphraseNote(&sb)
 	case stepTelemetry:
@@ -279,31 +255,13 @@ func (m OnboardingModel) renderStorageMode(sb *strings.Builder) {
 	choices := []struct{ label, desc string }{
 		{"local", "keep backups only on this machine"},
 		{"git-local", "commit to a local git repo (no push)"},
-		{"git-remote", "commit and push to GitHub or GitLab"},
 	}
 	for i, c := range choices {
 		m.renderChoiceWithDesc(sb, i, c.label, c.desc)
 	}
-}
 
-func (m OnboardingModel) renderRemoteHost(sb *strings.Builder) {
-	sb.WriteString(wPrompt.Render("  Which git host?") + "\n\n")
-	m.renderChoice(sb, 0, "GitHub")
-	m.renderChoice(sb, 1, "GitLab")
-}
-
-func (m OnboardingModel) renderRemoteAccount(sb *strings.Builder) {
-	var accounts []string
-	if m.result.RemoteHost == "github" {
-		accounts = m.ghAccounts
-	} else {
-		accounts = m.glabAccounts
-	}
-
-	sb.WriteString(wPrompt.Render("  Choose the authenticated account to use:") + "\n\n")
-	for i, acc := range accounts {
-		m.renderChoice(sb, i, acc)
-	}
+	sb.WriteString("\n" + wMuted.Render("  For git-remote mode, run `amnesiai init --mode git-remote` after onboarding") + "\n")
+	sb.WriteString(wMuted.Render("  (requires gh or glab CLI).") + "\n")
 }
 
 func (m OnboardingModel) renderPassphraseNote(sb *strings.Builder) {
@@ -351,7 +309,7 @@ func (m OnboardingModel) renderChoiceWithDesc(sb *strings.Builder, idx int, labe
 
 // ─── Result accessor ──────────────────────────────────────────────────────────
 
-// Result extracts the WizardResult from the final model returned by p.Run().
+// WizardResultFrom extracts the WizardResult from the final model returned by p.Run().
 // Returns (result, true) when the wizard completed normally; (zero, false)
 // when the user aborted or the model type is unexpected.
 func WizardResultFrom(m tea.Model) (WizardResult, bool) {
@@ -365,23 +323,28 @@ func WizardResultFrom(m tea.Model) (WizardResult, bool) {
 // ─── CLI account discovery ────────────────────────────────────────────────────
 //
 // These functions shell out to `gh auth list` and `glab auth status` to find
-// already-authenticated accounts.  Failures are silently ignored — the wizard
-// simply skips the account-selection screen when no accounts are found.
+// already-authenticated accounts.  Failures are silently ignored — the caller
+// simply receives an empty slice.
+//
+// Both gh and glab write their output to stderr, so we use CombinedOutput()
+// to capture both stdout and stderr in a single pass.
 
-func discoverGHAccounts() []string {
-	out, err := exec.Command("gh", "auth", "list").Output()
+func discoverGHAccounts() ([]string, error) {
+	cmd := exec.Command("gh", "auth", "list")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return parseGHAuthList(string(out))
+	return parseGHAuthList(string(out)), nil
 }
 
-func discoverGlabAccounts() []string {
-	out, err := exec.Command("glab", "auth", "status").Output()
+func discoverGlabAccounts() ([]string, error) {
+	cmd := exec.Command("glab", "auth", "status")
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	return parseGlabAuthStatus(string(out))
+	return parseGlabAuthStatus(string(out)), nil
 }
 
 // parseGHAuthList extracts usernames from `gh auth list` output.

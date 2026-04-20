@@ -74,6 +74,16 @@ func LoadState() (*State, error) {
 		return nil, fmt.Errorf("parse state file: %w", err)
 	}
 
+	// Schema version guard: refuse to read state written by a newer client so
+	// we don't silently truncate fields we don't understand on the next Save().
+	if s.SchemaVersion > stateSchemaVersion {
+		return nil, fmt.Errorf("state.json schema v%d is newer than supported v%d; upgrade amnesiai", s.SchemaVersion, stateSchemaVersion)
+	}
+	// Treat schema_version < 1 (missing or zeroed) as a fresh default.
+	if s.SchemaVersion < 1 {
+		return defaultState(), nil
+	}
+
 	// Guarantee the map is non-nil even for old state files that omitted the field.
 	if s.RemoteBindings == nil {
 		s.RemoteBindings = make(map[string]RemoteBinding)

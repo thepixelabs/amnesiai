@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -138,6 +139,51 @@ func TestBindRemote_Validation(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLoadState_SchemaVersionGuard(t *testing.T) {
+	t.Run("newer schema rejected", func(t *testing.T) {
+		home := withTempHome(t)
+		dir := filepath.Join(home, ".amnesiai")
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		// Write a state.json with a future schema version.
+		data := []byte(`{"schema_version":999,"remote_bindings":{}}`)
+		if err := os.WriteFile(filepath.Join(dir, "state.json"), data, 0600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		_, err := config.LoadState()
+		if err == nil {
+			t.Fatal("expected error for schema version 999, got nil")
+		}
+		if !strings.Contains(err.Error(), "newer than supported") {
+			t.Errorf("error message should mention 'newer than supported', got: %v", err)
+		}
+	})
+
+	t.Run("zero schema treated as fresh default", func(t *testing.T) {
+		home := withTempHome(t)
+		dir := filepath.Join(home, ".amnesiai")
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		// schema_version omitted — JSON zero value is 0.
+		data := []byte(`{"remote_bindings":{}}`)
+		if err := os.WriteFile(filepath.Join(dir, "state.json"), data, 0600); err != nil {
+			t.Fatalf("write: %v", err)
+		}
+		s, err := config.LoadState()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if s == nil {
+			t.Fatal("expected non-nil state")
+		}
+		if s.RemoteBindings == nil {
+			t.Error("RemoteBindings should be non-nil on default state")
+		}
+	})
 }
 
 func TestBindRemote_UpdatesExistingBinding(t *testing.T) {
