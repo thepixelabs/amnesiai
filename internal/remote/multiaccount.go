@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 )
 
@@ -146,9 +145,9 @@ func scoped(env []string, tool, account string) []string {
 		}
 	case "glab":
 		// glab uses GITLAB_TOKEN.
-		t, err := exec.Command("glab", "auth", "token", "--user", account).Output()
+		t, err := GLabToken(account)
 		if err == nil {
-			token = strings.TrimSpace(string(t))
+			token = t
 		}
 	}
 	if token == "" {
@@ -171,10 +170,3 @@ func scoped(env []string, tool, account string) []string {
 	return filtered
 }
 
-// stderrOf extracts stderr text from an *exec.ExitError, if available.
-func stderrOf(err error) string {
-	if ee, ok := err.(*exec.ExitError); ok {
-		return strings.TrimSpace(string(ee.Stderr))
-	}
-	return ""
-}
