@@ -1,3 +1,20 @@
+## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.5...v1.1.0) (2026-04-20)
+
+### Features
+
+* **track-a:** storage schema, config fields, claude security hardening ([d669ee0](https://github.com/thepixelabs/amnesiai/commit/d669ee0d1c432c1792a07fcd23da79706978c4d9))
+* **track-b:** redaction Option B + passphrase flag hardening ([2a0a609](https://github.com/thepixelabs/amnesiai/commit/2a0a609ede3545da05123a471b00b306387e9a72))
+* **track-g:** codex + copilot provider completion, per-project enumeration, claude allowlist refactor ([0abc0f0](https://github.com/thepixelabs/amnesiai/commit/0abc0f0de4487ca9534c442b1a21ecd7d173b83f))
+
+### Bug Fixes
+
+* **track-g:** wire ProjectPaths through provider factory, validate, log once ([45aaf38](https://github.com/thepixelabs/amnesiai/commit/45aaf3833befbc13aa1053ff60db4336ae237901))
+
+### Documentation
+
+* **1.1.0:** add scope policy, migration guide, update README + CHANGELOG ([6e693fa](https://github.com/thepixelabs/amnesiai/commit/6e693fa2374580158c4285738091775677c4cdd4))
+* **qa:** add test strategy for tracks A-F refactor ([9a4afda](https://github.com/thepixelabs/amnesiai/commit/9a4afdad6d11af94eb3be314207328b9f2c1d63f))
+
 ## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.5...v1.1.0) (2026-04-19)
 
 ### Added
