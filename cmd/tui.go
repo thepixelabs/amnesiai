@@ -25,9 +25,11 @@ import (
 	figure "github.com/common-nighthawk/go-figure"
 	"github.com/spf13/cobra"
 
+	"github.com/thepixelabs/amnesiai/internal/config"
 	"github.com/thepixelabs/amnesiai/internal/core"
 	providerregistry "github.com/thepixelabs/amnesiai/internal/provider"
 	"github.com/thepixelabs/amnesiai/internal/storage"
+	amnesiaitui "github.com/thepixelabs/amnesiai/internal/tui"
 	"github.com/thepixelabs/amnesiai/internal/version"
 )
 
@@ -256,6 +258,7 @@ const (
 	actionDiff                  // run diff flow
 	actionList                  // run list flow
 	actionCompletion            // show completion help
+	actionSettings              // open settings menu (hotkey: s)
 	actionQuit                  // exit
 )
 
@@ -265,6 +268,7 @@ var menuLabels = []string{
 	"Diff against a backup",
 	"List backups",
 	"Completion help",
+	"Settings",
 	"Quit",
 }
 
@@ -286,7 +290,7 @@ type tuiModel struct {
 }
 
 // footerText is the full footer bar content — matches altergo's nav line style.
-const footerText = " ↑↓ navigate · Enter select · q quit · amnesiai by pixelabs"
+const footerText = " ↑↓ navigate · Enter select · s settings · q quit · amnesiai by pixelabs"
 
 func newTUIModel() tuiModel {
 	return tuiModel{
@@ -333,6 +337,9 @@ func (m tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", " ":
 			action := menuAction(m.cursor + 1) // +1 because actionNone=0
 			return m, func() tea.Msg { return selectedMsg{action: action} }
+		case "s":
+			// Shortcut: jump directly to settings without navigating the cursor.
+			return m, func() tea.Msg { return selectedMsg{action: actionSettings} }
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		}
@@ -460,6 +467,10 @@ func runRoot(cmd *cobra.Command, args []string) error {
 	if !isTTYFn() {
 		return cmd.Help()
 	}
+	// --settings bypasses the main menu and goes directly to the settings flow.
+	if openSettings, _ := cmd.Flags().GetBool("settings"); openSettings {
+		return runSettingsFlow()
+	}
 	return runTUI(cmd, args)
 }
 
@@ -476,7 +487,19 @@ func runTUI(cmd *cobra.Command, args []string) error {
 // This avoids the complexity of running readline-style prompts inside the event
 // loop and matches the clean suspend/resume approach used by altergo's curses
 // wrapper pattern.
+//
+// On the first iteration (when config.FirstRun is true) the onboarding wizard
+// is run before the main menu appears.
 func tuiLoop(cmd *cobra.Command) error {
+	// First-run check: show onboarding wizard before the main menu.
+	if cfg.FirstRun {
+		if err := runOnboardingFlow(); err != nil {
+			return err
+		}
+		// If FirstRun is still true after the wizard (user aborted or didn't
+		// complete a backup), stay in the loop and show the main menu anyway.
+	}
+
 	for {
 		model := newTUIModel()
 		p := tea.NewProgram(model, tea.WithAltScreen())
@@ -503,10 +526,106 @@ func tuiLoop(cmd *cobra.Command) error {
 			_ = ui.listFlow()
 		case actionCompletion:
 			ui.completionHelp()
+		case actionSettings:
+			if err := runSettingsFlow(); err != nil {
+				tuiPrintError(err)
+			}
 		case actionQuit, actionNone:
 			return nil
 		}
 		// After any sub-flow, loop back to show the TUI again.
+	}
+}
+
+// ─── Onboarding and settings flows ───────────────────────────────────────────
+
+// runOnboardingFlow runs the onboarding wizard and persists the result.
+//
+// Skip rules (per spec):
+//   - If the user aborts (ctrl+c), FirstRun stays true so the wizard triggers again.
+//   - If the wizard completed but RunBackupNow is false, FirstRun stays true.
+//   - Only a completed wizard where the user also ran (or triggered) a backup
+//     sets FirstRun = false — that is handled by incrementBackupCount() in the
+//     backup flow.
+func runOnboardingFlow() error {
+	result, err := amnesiaitui.RunOnboarding()
+	if err != nil {
+		return fmt.Errorf("onboarding: %w", err)
+	}
+
+	if !result.Completed {
+		// User aborted — keep FirstRun true.
+		return nil
+	}
+
+	// Apply wizard choices to config.
+	cfg.StorageMode = result.StorageMode
+	cfg.Telemetry = result.Telemetry
+
+	// Load and update state.
+	st, _ := config.LoadState()
+	if st == nil {
+		st, _ = config.LoadState() // second try after potential dir creation
+	}
+	if st != nil {
+		st.OnboardingLastSeenVersion = version.Version
+		_ = st.Save()
+	}
+
+	// Persist config.  FirstRun stays true until a backup actually completes.
+	if err := config.Save(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not save config after onboarding: %v\n", err)
+	}
+
+	return nil
+}
+
+// runSettingsFlow opens the settings Bubbletea menu and applies any changes.
+// It loops internally so that the user can make multiple changes before backing
+// out to the main menu.
+func runSettingsFlow() error {
+	for {
+		st, _ := config.LoadState()
+		result, updatedCfg, err := amnesiaitui.RunSettings(cfg, st)
+		if err != nil {
+			return err
+		}
+
+		// Persist any toggle changes immediately.
+		if cfg.VerboseHelp != updatedCfg.VerboseHelp || cfg.Telemetry != updatedCfg.Telemetry {
+			cfg.VerboseHelp = updatedCfg.VerboseHelp
+			cfg.Telemetry = updatedCfg.Telemetry
+			if saveErr := config.Save(cfg); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not save settings: %v\n", saveErr)
+			}
+		}
+
+		tuiClearScreen()
+
+		switch result.Action {
+		case amnesiaitui.SettingsActionRerunOnboard:
+			if err := runOnboardingFlow(); err != nil {
+				tuiPrintError(err)
+			}
+			// Fall through to loop — show settings menu again.
+
+		case amnesiaitui.SettingsActionViewConfig:
+			tuiPrintSubHeader("Config path")
+			fmt.Print(amnesiaitui.FormatConfigPath())
+			r := bufio.NewReader(os.Stdin)
+			tuiPause(r)
+
+		case amnesiaitui.SettingsActionViewBindings:
+			tuiPrintSubHeader("Remote bindings")
+			fmt.Print(amnesiaitui.FormatRemoteBindings(st))
+			r := bufio.NewReader(os.Stdin)
+			tuiPause(r)
+
+		case amnesiaitui.SettingsActionBack, amnesiaitui.SettingsActionNone:
+			return nil
+		}
+		// Toggle actions (verbose, telemetry) don't reach here — they stay in the
+		// Bubbletea model loop until the user backs out.
 	}
 }
 
