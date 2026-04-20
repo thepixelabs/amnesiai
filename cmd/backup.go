@@ -10,6 +10,7 @@ import (
 
 	"github.com/thepixelabs/amnesiai/internal/config"
 	"github.com/thepixelabs/amnesiai/internal/core"
+	"github.com/thepixelabs/amnesiai/internal/remote"
 	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
@@ -52,7 +53,33 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	if !cfg.AutoPush {
 		noPush = true
 	}
-	store, err := storage.NewWithOptions(cfg.StorageMode, cfg.BackupDir, noPush, nil)
+
+	// Resolve a scoped token for the bound account so that git push uses the
+	// correct credentials for multi-account setups instead of the ambient token.
+	var tokenEnv []string
+	if cfg.StorageMode == "git-remote" && cfg.GitRemote.URL != "" {
+		st, stErr := config.LoadState()
+		if stErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: could not load state for token resolution: %v\n", stErr)
+		} else if binding, ok := st.LookupBinding(cfg.GitRemote.URL); ok {
+			switch binding.Host {
+			case "github":
+				if tok, tokErr := remote.GHToken(binding.Account); tokErr == nil && tok != "" {
+					tokenEnv = []string{"GH_TOKEN=" + tok}
+				} else if tokErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not fetch GH token for %s: %v\n", binding.Account, tokErr)
+				}
+			case "gitlab":
+				if tok, tokErr := remote.GLabToken(binding.Account); tokErr == nil && tok != "" {
+					tokenEnv = []string{"GITLAB_TOKEN=" + tok}
+				} else if tokErr != nil {
+					fmt.Fprintf(os.Stderr, "warning: could not fetch GitLab token for %s: %v\n", binding.Account, tokErr)
+				}
+			}
+		}
+	}
+
+	store, err := storage.NewWithOptions(cfg.StorageMode, cfg.BackupDir, noPush, tokenEnv)
 	if err != nil {
 		return err
 	}

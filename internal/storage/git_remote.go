@@ -3,10 +3,17 @@ package storage
 import (
 	"fmt"
 	"os"
+	"sync"
+	"time"
 
 	"github.com/thepixelabs/amnesiai/internal/config"
 	"github.com/thepixelabs/amnesiai/internal/remote"
 )
+
+// privacyCacheTTL is how long we trust a previous "repo is private" result
+// before re-checking with the API.  This avoids hammering the API on every
+// save while still catching a repo that was flipped to public mid-session.
+const privacyCacheTTL = 5 * time.Minute
 
 // gitRemoteStorage wraps gitLocalStorage and additionally pushes to a remote
 // after each commit (unless noPush is true).
@@ -17,6 +24,10 @@ type gitRemoteStorage struct {
 	// tokenEnv is a slice of extra env vars that scope the push to the right
 	// GitHub/GitLab account (e.g. GH_TOKEN=<account-token>).
 	tokenEnv []string
+
+	// privacy cache — checked once per privacyCacheTTL to avoid API hammering.
+	privacyMu            sync.Mutex
+	privacyLastCheckedAt time.Time
 }
 
 // newGitRemote returns a gitRemoteStorage.
@@ -30,12 +41,62 @@ func newGitRemote(dir string, noPush bool, tokenEnv []string) *gitRemoteStorage 
 	}
 }
 
+// verifyPrivateCached checks that the remote repo is still private, but
+// skips the API call if we checked within the last privacyCacheTTL.
+// Returns an error if the repo is public or the check fails.
+func (s *gitRemoteStorage) verifyPrivateCached(repoURL string) error {
+	s.privacyMu.Lock()
+	last := s.privacyLastCheckedAt
+	s.privacyMu.Unlock()
+
+	if time.Since(last) < privacyCacheTTL {
+		return nil // still fresh
+	}
+
+	// Resolve the account from state bindings (best-effort; fall through on error).
+	var account string
+	if st, err := config.LoadState(); err == nil {
+		if b, ok := st.LookupBinding(repoURL); ok {
+			account = b.Account
+		}
+	}
+
+	host := remote.DetectForge(repoURL)
+	var verifyErr error
+	switch host {
+	case remote.HostGitHub:
+		verifyErr = remote.GHVerifyPrivate(repoURL, account)
+	case remote.HostGitLab:
+		verifyErr = remote.GLabVerifyPrivate(repoURL, account)
+	default:
+		// Unknown forge: skip check rather than blocking the push.
+		return nil
+	}
+
+	if verifyErr != nil {
+		return verifyErr
+	}
+
+	s.privacyMu.Lock()
+	s.privacyLastCheckedAt = time.Now()
+	s.privacyMu.Unlock()
+	return nil
+}
+
 func (s *gitRemoteStorage) Save(name string, meta Metadata, payload []byte) (string, error) {
 	id, err := s.local.Save(name, meta, payload)
 	if err != nil {
 		return id, err
 	}
 	if !s.noPush {
+		// Verify the remote repository is still private before every push.
+		// On error we skip the push but keep the local commit intact.
+		repoURL := gitGetRemoteURL(s.dir)
+		if repoURL != "" {
+			if verr := s.verifyPrivateCached(repoURL); verr != nil {
+				return id, fmt.Errorf("privacy check failed — push aborted (commit saved locally): %w", verr)
+			}
+		}
 		if err := gitPush(s.dir, s.tokenEnv); err != nil {
 			return id, fmt.Errorf("git push: %w", err)
 		}
@@ -53,6 +114,23 @@ func (s *gitRemoteStorage) List() ([]BackupEntry, error) {
 
 func (s *gitRemoteStorage) Latest() (string, error) {
 	return s.local.Latest()
+}
+
+// gitGetRemoteURL returns the URL of the "origin" remote, or "" if not set.
+func gitGetRemoteURL(dir string) string {
+	out, err := gitRun(dir, nil, "remote", "get-url", "origin")
+	if err != nil {
+		return ""
+	}
+	return trimNL(string(out))
+}
+
+// trimNL strips trailing newline characters.
+func trimNL(s string) string {
+	for len(s) > 0 && (s[len(s)-1] == '\n' || s[len(s)-1] == '\r') {
+		s = s[:len(s)-1]
+	}
+	return s
 }
 
 // ─── InitGitRemote ────────────────────────────────────────────────────────────
