@@ -7,9 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
+	"regexp"
 	"strings"
 )
+
+// ownerRepoRegex validates "owner/repo" identifiers before they are
+// interpolated into CLI arguments. This prevents shell-injection via crafted
+// repo URLs (e.g. "foo/bar --jq .token").
+var ownerRepoRegex = regexp.MustCompile(`^[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+$`)
 
 // GHRepo holds the fields we care about from `gh api repos/:owner/:repo`.
 type GHRepo struct {
@@ -23,12 +28,10 @@ type GHRepo struct {
 // Returns the clone URL of the new repository.
 func GHCreateRepo(name, account string) (string, error) {
 	args := []string{"repo", "create", name, "--private", "--clone=false"}
-	cmd := exec.Command("gh", args...)
-	cmd.Env = scoped(os.Environ(), "gh", account)
-
-	out, err := cmd.Output()
+	env := scoped(os.Environ(), "gh", account)
+	out, err := runWithTimeoutEnv(TimeoutAPICall, env, "gh", args...)
 	if err != nil {
-		return "", fmt.Errorf("gh repo create: %w — %s", err, stderrOf(err))
+		return "", fmt.Errorf("gh repo create: %w", err)
 	}
 	url := strings.TrimSpace(string(out))
 	if url == "" {
@@ -45,13 +48,13 @@ func GHVerifyPrivate(repoURL, account string) error {
 	if err != nil {
 		return err
 	}
-	args := []string{"api", fmt.Sprintf("repos/%s", ownerRepo)}
-	cmd := exec.Command("gh", args...)
-	cmd.Env = scoped(os.Environ(), "gh", account)
-
-	out, err := cmd.Output()
+	if !ownerRepoRegex.MatchString(ownerRepo) {
+		return fmt.Errorf("invalid repo identifier %q: must match owner/repo", ownerRepo)
+	}
+	env := scoped(os.Environ(), "gh", account)
+	out, err := runWithTimeoutEnv(TimeoutAPICall, env, "gh", "api", fmt.Sprintf("repos/%s", ownerRepo))
 	if err != nil {
-		return fmt.Errorf("gh api repos/%s: %w — %s", ownerRepo, err, stderrOf(err))
+		return fmt.Errorf("gh api repos/%s: %w", ownerRepo, err)
 	}
 
 	var repo GHRepo
@@ -66,7 +69,7 @@ func GHVerifyPrivate(repoURL, account string) error {
 
 // GHAuthList returns the list of authenticated GitHub accounts from `gh auth list`.
 func GHAuthList() ([]string, error) {
-	out, err := exec.Command("gh", "auth", "list").Output()
+	out, err := runWithTimeout(TimeoutAPICall, "gh", "auth", "list")
 	if err != nil {
 		return nil, fmt.Errorf("gh auth list: %w", err)
 	}
@@ -76,7 +79,7 @@ func GHAuthList() ([]string, error) {
 // GHToken returns the token for a given account via `gh auth token --user <account>`.
 // This is used to scope individual gh commands to a specific account.
 func GHToken(account string) (string, error) {
-	out, err := exec.Command("gh", "auth", "token", "--user", account).Output()
+	out, err := runWithTimeout(TimeoutAPICall, "gh", "auth", "token", "--user", account)
 	if err != nil {
 		return "", fmt.Errorf("gh auth token --user %s: %w", account, err)
 	}

@@ -133,6 +133,13 @@ func (s *State) Save() error {
 	return nil
 }
 
+// LookupBinding returns the RemoteBinding for repoURL, if one exists.
+// Callers should use this rather than reading RemoteBindings directly.
+func (s *State) LookupBinding(repoURL string) (RemoteBinding, bool) {
+	b, ok := s.RemoteBindings[repoURL]
+	return b, ok
+}
+
 // BindRemote records (or updates) the host+account binding for repoURL.
 // Exported so Track F (storage/git*.go, internal/remote/*) can call it
 // without importing an internal/state package.

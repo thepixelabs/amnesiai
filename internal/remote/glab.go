@@ -4,9 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
+	"regexp"
 	"strings"
 )
+
+// glabProjectRegex validates GitLab project paths before they are interpolated
+// into CLI arguments. Leading "-" is rejected to prevent flag injection.
+var glabProjectRegex = regexp.MustCompile(`^[a-zA-Z0-9._/][a-zA-Z0-9._/-]*$`)
 
 // GLabRepo holds the fields we care about from `glab api projects/:id`.
 type GLabRepo struct {
@@ -17,12 +21,10 @@ type GLabRepo struct {
 // Returns the HTTP clone URL of the new project.
 func GLabCreateRepo(name, account string) (string, error) {
 	args := []string{"repo", "create", name, "--private"}
-	cmd := exec.Command("glab", args...)
-	cmd.Env = scoped(os.Environ(), "glab", account)
-
-	out, err := cmd.Output()
+	env := scoped(os.Environ(), "glab", account)
+	out, err := runWithTimeoutEnv(TimeoutAPICall, env, "glab", args...)
 	if err != nil {
-		return "", fmt.Errorf("glab repo create: %w — %s", err, stderrOf(err))
+		return "", fmt.Errorf("glab repo create: %w", err)
 	}
 	// glab prints a URL among the output lines; find the first https:// line.
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
@@ -41,14 +43,15 @@ func GLabVerifyPrivate(repoURL, account string) error {
 	if err != nil {
 		return err
 	}
+	// Reject paths starting with "-" (flag injection) or otherwise invalid.
+	if !glabProjectRegex.MatchString(projectPath) || strings.HasPrefix(projectPath, "-") {
+		return fmt.Errorf("invalid GitLab project path %q", projectPath)
+	}
 	encoded := strings.ReplaceAll(projectPath, "/", "%2F")
-	args := []string{"api", fmt.Sprintf("projects/%s", encoded)}
-	cmd := exec.Command("glab", args...)
-	cmd.Env = scoped(os.Environ(), "glab", account)
-
-	out, err := cmd.Output()
+	env := scoped(os.Environ(), "glab", account)
+	out, err := runWithTimeoutEnv(TimeoutAPICall, env, "glab", "api", fmt.Sprintf("projects/%s", encoded))
 	if err != nil {
-		return fmt.Errorf("glab api projects/%s: %w — %s", encoded, err, stderrOf(err))
+		return fmt.Errorf("glab api projects/%s: %w", encoded, err)
 	}
 
 	var repo GLabRepo
@@ -63,12 +66,22 @@ func GLabVerifyPrivate(repoURL, account string) error {
 
 // GLabAuthList returns the list of authenticated GitLab accounts.
 func GLabAuthList() ([]string, error) {
-	out, err := exec.Command("glab", "auth", "status").Output()
+	out, err := runWithTimeout(TimeoutAPICall, "glab", "auth", "status")
 	if err != nil {
 		// glab auth status exits non-zero when no accounts are logged in.
 		return nil, fmt.Errorf("glab auth status: %w", err)
 	}
 	return parseAuthList(string(out)), nil
+}
+
+// GLabToken returns the token for a given GitLab account via
+// `glab auth token --user <account>`.  Used to build tokenEnv for git push.
+func GLabToken(account string) (string, error) {
+	out, err := runWithTimeout(TimeoutAPICall, "glab", "auth", "token", "--user", account)
+	if err != nil {
+		return "", fmt.Errorf("glab auth token --user %s: %w", account, err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // glabProjectPath extracts "namespace/project" from a GitLab URL.

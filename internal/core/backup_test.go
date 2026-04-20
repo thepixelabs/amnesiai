@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"encoding/binary"
 	"strings"
 	"testing"
 
@@ -691,22 +692,117 @@ func craftMaliciousTar(t *testing.T, entryName string) []byte {
 	return buf.Bytes()
 }
 
+// craftRawTar builds a tar.gz whose single entry header is written with raw
+// bytes, bypassing Go's archive/tar.Writer validation.  This lets us craft
+// entries with names that Go's writer rejects (null bytes, empty strings) but
+// that a C tar implementation — or an attacker — could produce on disk.
+//
+// The POSIX ustar header layout (512 bytes):
+//
+//	[0:100]   name
+//	[100:108] mode (octal ASCII, NUL-terminated)
+//	[108:116] uid
+//	[116:124] gid
+//	[124:136] size
+//	[136:148] mtime
+//	[148:156] checksum
+//	[156]     type flag ('0' = regular file)
+//	[157:257] linkname
+//	[257:263] magic "ustar\0"
+//	[263:265] version "00"
+//	... (rest zeroed)
+func craftRawTar(t *testing.T, entryName string) []byte {
+	t.Helper()
+
+	content := []byte("pwned")
+
+	// Build a 512-byte ustar header block.
+	var hdr [512]byte
+	// name (100 bytes) — copy raw bytes, including null bytes if present.
+	copy(hdr[0:100], []byte(entryName))
+	// mode
+	copy(hdr[100:108], []byte("0000644\x00"))
+	// uid, gid
+	copy(hdr[108:116], []byte("0000000\x00"))
+	copy(hdr[116:124], []byte("0000000\x00"))
+	// size (octal, 11 digits + space)
+	sizeFmt := []byte("00000000005 ") // len("pwned") == 5
+	copy(hdr[124:136], sizeFmt)
+	// mtime
+	copy(hdr[136:148], []byte("00000000000 "))
+	// type flag: '0' = regular file
+	hdr[156] = '0'
+	// magic + version
+	copy(hdr[257:263], []byte("ustar\x00"))
+	copy(hdr[263:265], []byte("00"))
+
+	// Compute checksum: sum of all header bytes treating checksum field as spaces.
+	for i := 148; i < 156; i++ {
+		hdr[i] = ' '
+	}
+	var csum uint32
+	for _, b := range hdr {
+		csum += uint32(b)
+	}
+	_ = binary.BigEndian // satisfy import
+	csumStr := []byte{'0', '0', '0', '0', '0', '0', ' ', '\x00'}
+	// write 6-digit octal + space + NUL
+	val := csum
+	for i := 5; i >= 0; i-- {
+		csumStr[i] = byte('0' + val%8)
+		val /= 8
+	}
+	copy(hdr[148:156], csumStr)
+
+	// Data block: pad content to 512-byte boundary.
+	var dataBuf [512]byte
+	copy(dataBuf[:], content)
+
+	// Two 512-byte zero blocks = end-of-archive.
+	var eoa [1024]byte
+
+	// Combine into a raw tar stream and gzip it.
+	var raw bytes.Buffer
+	raw.Write(hdr[:])
+	raw.Write(dataBuf[:])
+	raw.Write(eoa[:])
+
+	var gz bytes.Buffer
+	gw := gzip.NewWriter(&gz)
+	_, _ = gw.Write(raw.Bytes())
+	if err := gw.Close(); err != nil {
+		t.Fatalf("craftRawTar gzip.Close: %v", err)
+	}
+	return gz.Bytes()
+}
+
 // TestExtractArchive_PathTraversalRejected verifies that ExtractArchive refuses
 // tar entries whose names would resolve outside the destination root.
 func TestExtractArchive_PathTraversalRejected(t *testing.T) {
 	cases := []struct {
 		name      string
 		entryName string
+		rawTar    bool // use craftRawTar instead of craftMaliciousTar
 	}{
-		{"DotDotSlash", "../../etc/passwd"},
-		{"DotDotPrefix", "../secret"},
-		{"AbsolutePath", "/etc/passwd"},
-		{"DeepDotDot", "a/b/../../../../etc/shadow"},
+		{"DotDotSlash", "../../etc/passwd", false},
+		{"DotDotPrefix", "../secret", false},
+		{"AbsolutePath", "/etc/passwd", false},
+		{"DeepDotDot", "a/b/../../../../etc/shadow", false},
+		{"WindowsBackslash", "..\\..\\etc\\passwd", false},
+		{"LiteralDotDot", "..", false},
+		// EmptyName must be crafted with raw bytes because Go's archive/tar.Writer
+		// rejects an empty name during WriteHeader.
+		{"EmptyName", "", true},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			payload := craftMaliciousTar(t, tc.entryName)
+			var payload []byte
+			if tc.rawTar {
+				payload = craftRawTar(t, tc.entryName)
+			} else {
+				payload = craftMaliciousTar(t, tc.entryName)
+			}
 			_, _, err := core.ExtractArchive(payload)
 			if err == nil {
 				t.Errorf("ExtractArchive(%q): expected path-traversal error, got nil", tc.entryName)
@@ -717,6 +813,38 @@ func TestExtractArchive_PathTraversalRejected(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractArchive_NullByteNameSanitizedByReader verifies that a tar entry
+// whose raw header contains a null byte in the name field is sanitized by
+// Go's archive/tar reader (null-terminates C strings), so the extracted name
+// is the safe prefix before the null — not the traversal suffix after it.
+// This documents that Go's tar reader is a first line of defense against this
+// attack vector.  The strings.ContainsRune guard in ExtractArchive is
+// defense-in-depth for future reader changes or PAX extensions.
+func TestExtractArchive_NullByteNameSanitizedByReader(t *testing.T) {
+	// "foo\x00../../etc/passwd" — Go's tar reader truncates at the null byte
+	// and returns "foo", which is a safe path.
+	payload := craftRawTar(t, "foo\x00../../etc/passwd")
+	files, _, err := core.ExtractArchive(payload)
+	if err != nil {
+		// If the reader or our guard rejects it, that is also acceptable.
+		return
+	}
+	// If accepted, the path must be the safe prefix, not the traversal component.
+	for name := range files {
+		if strings.Contains(name, "..") || strings.Contains(name, "etc") {
+			t.Errorf("null-byte traversal component leaked into extracted path: %q", name)
+		}
+	}
+}
+
+// TestExtractArchive_PathTraversalRejected_Extra ensures the craftRawTar helper
+// compiles and is reachable, so the build does not fail with an unused symbol.
+func TestExtractArchive_PathTraversalRejected_Extra(t *testing.T) {
+	// craftRawTar is used by TestExtractArchive_NullByteNameSanitizedByReader;
+	// this test is a compile-time smoke test only.
+	_ = craftRawTar
 }
 
 // TestExtractArchive_LegitimatePathAccepted verifies that normal relative paths

@@ -318,6 +318,14 @@ func ExtractArchive(payload []byte) (map[string][]byte, []ManifestEntry, error) 
 			return nil, nil, fmt.Errorf("illegal entry in archive: symlink/hardlink not permitted: %s", header.Name)
 		}
 
+		// Reject dangerous path forms before any further processing.
+		// These checks must come before filepath.IsAbs / filepath.Join because
+		// some forms (empty name, null bytes, Windows backslashes) can bypass
+		// the later join-based check on some platforms.
+		if header.Name == "" || strings.Contains(header.Name, "\\") || strings.ContainsRune(header.Name, 0) {
+			return nil, nil, fmt.Errorf("illegal path in archive: %q", header.Name)
+		}
+
 		// Reject absolute paths before filepath.Join sees them — filepath.Join
 		// drops the prefix when the second argument starts with "/", so an
 		// absolute entry like "/etc/passwd" would silently pass the join check.

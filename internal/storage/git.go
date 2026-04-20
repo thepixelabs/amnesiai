@@ -5,23 +5,60 @@
 package storage
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/thepixelabs/amnesiai/internal/remote"
 )
 
 // gitRun executes a git command inside dir and returns combined output.
 // Env additions are appended to the process environment.
+// tokenEnv entries (matching *_TOKEN=<value>) are redacted from any error
+// output before the error is returned, so tokens never leak into logs.
 func gitRun(dir string, extraEnv []string, args ...string) ([]byte, error) {
-	cmd := exec.Command("git", args...)
+	return gitRunTimeout(dir, extraEnv, remote.TimeoutGitShort, args...)
+}
+
+// gitRunTimeout is like gitRun but honours an explicit timeout.
+func gitRunTimeout(dir string, extraEnv []string, timeout time.Duration, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), extraEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return out, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		// Redact token values from output before embedding in the error message.
+		sanitised := redactTokens(out, extraEnv)
+		if ctx.Err() != nil {
+			return sanitised, fmt.Errorf("git %s timed out after %s: %w", strings.Join(args, " "), timeout, ctx.Err())
+		}
+		return sanitised, fmt.Errorf("git %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(string(sanitised)))
 	}
 	return out, nil
+}
+
+// redactTokens replaces the value portion of any "*_TOKEN=<value>" entries in
+// envVars with "<REDACTED:TOKEN>" inside data.  This prevents tokens from
+// appearing in error messages when git echoes its environment (e.g. GIT_TRACE).
+func redactTokens(data []byte, envVars []string) []byte {
+	for _, e := range envVars {
+		if !strings.Contains(e, "_TOKEN=") {
+			continue
+		}
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) != 2 || parts[1] == "" {
+			continue
+		}
+		data = bytes.ReplaceAll(data, []byte(parts[1]), []byte("<REDACTED:TOKEN>"))
+	}
+	return data
 }
 
 // gitInit runs `git init` inside dir, creating the repo if it does not exist.
@@ -54,7 +91,9 @@ func gitConfigAuthor(dir string) error {
 // gitGlobalConfig reads a single git config value from global scope.
 // Returns empty string if the key is unset.
 func gitGlobalConfig(key string) string {
-	out, err := exec.Command("git", "config", "--global", key).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), remote.TimeoutGitShort)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "config", "--global", key).Output()
 	if err != nil {
 		return ""
 	}
@@ -71,7 +110,9 @@ func gitAddAll(dir string) error {
 // If nothing is staged it does nothing (treats clean index as success).
 func gitCommit(dir, message string) error {
 	// Check if there is anything to commit.
-	out, err := exec.Command("git", "-C", dir, "status", "--porcelain").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), remote.TimeoutGitShort)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "status", "--porcelain").Output()
 	if err == nil && len(strings.TrimSpace(string(out))) == 0 {
 		return nil // nothing to commit
 	}
@@ -107,13 +148,16 @@ func gitRemoteAdd(dir, name, url string) error {
 // gitPush pushes the current branch to origin.
 func gitPush(dir string, extraEnv []string) error {
 	// --set-upstream covers both first push and subsequent ones.
-	_, err := gitRun(dir, extraEnv, "push", "--set-upstream", "origin", "HEAD")
+	// Use the longer push timeout since this is a network operation.
+	_, err := gitRunTimeout(dir, extraEnv, remote.TimeoutGitPush, "push", "--set-upstream", "origin", "HEAD")
 	return err
 }
 
 // gitIsRepo returns true when dir is already a git repository root.
 func gitIsRepo(dir string) bool {
-	out, err := exec.Command("git", "-C", dir, "rev-parse", "--is-inside-work-tree").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), remote.TimeoutGitShort)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "rev-parse", "--is-inside-work-tree").Output()
 	if err != nil {
 		return false
 	}
@@ -122,7 +166,9 @@ func gitIsRepo(dir string) bool {
 
 // gitHasRemote returns true if the named remote is configured.
 func gitHasRemote(dir, name string) bool {
-	out, err := exec.Command("git", "-C", dir, "remote").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), remote.TimeoutGitShort)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, "git", "-C", dir, "remote").Output()
 	if err != nil {
 		return false
 	}
