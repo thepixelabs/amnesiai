@@ -60,6 +60,8 @@ func init() {
 	rootCmd.PersistentFlags().Int("passphrase-fd", -1, "read encryption passphrase from this file descriptor (e.g. 3)")
 	rootCmd.PersistentFlags().Bool("no-encrypt", false, "skip encryption even if passphrase is available")
 	rootCmd.PersistentFlags().Bool("force-no-encrypt", false, "allow unencrypted backup even when secrets are detected (requires --no-encrypt)")
+	// --settings opens the settings/onboarding menu instead of the main TUI.
+	rootCmd.Flags().Bool("settings", false, "open the settings menu (re-run onboarding, toggle options)")
 
 	// Bind flags to viper.
 	_ = v.BindPFlag("storage_mode", rootCmd.PersistentFlags().Lookup("storage-mode"))
