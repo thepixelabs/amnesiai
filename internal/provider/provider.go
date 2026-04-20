@@ -8,8 +8,16 @@ import (
 	"sync"
 )
 
-// Factory lazily constructs a provider instance.
-type Factory func() (Provider, error)
+// ProviderOpts carries configuration that is only known at runtime (after
+// config is loaded) and must be forwarded to provider constructors.
+// The opts struct is intentionally extensible: add new fields here rather
+// than changing factory signatures again.
+type ProviderOpts struct {
+	ProjectPaths []string // per-project directories to scan
+}
+
+// Factory lazily constructs a provider instance with the given options.
+type Factory func(ProviderOpts) (Provider, error)
 
 // DiffEntry describes a single file difference between two snapshots.
 type DiffEntry struct {
@@ -43,10 +51,11 @@ var (
 	registry   = make(map[string]Factory)
 )
 
-// Register adds a provider to the global registry.
+// Register adds a provider to the global registry using a zero-arg constructor
+// that returns the same instance on every call.
 // It panics if a provider with the same name is already registered.
 func Register(p Provider) {
-	RegisterFactory(p.Name(), func() (Provider, error) {
+	RegisterFactory(p.Name(), func(ProviderOpts) (Provider, error) {
 		return p, nil
 	})
 }
@@ -62,8 +71,9 @@ func RegisterFactory(name string, factory Factory) {
 	registry[name] = factory
 }
 
-// Get returns a registered provider by name, or an error if not found.
-func Get(name string) (Provider, error) {
+// Get returns a registered provider by name, constructed with the given opts.
+// Returns an error if the name is not registered or construction fails.
+func Get(name string, opts ProviderOpts) (Provider, error) {
 	registryMu.RLock()
 	factory, ok := registry[name]
 	registryMu.RUnlock()
@@ -71,14 +81,16 @@ func Get(name string) (Provider, error) {
 		return nil, fmt.Errorf("provider %q not registered", name)
 	}
 
-	p, err := factory()
+	p, err := factory(opts)
 	if err != nil {
 		return nil, fmt.Errorf("provider %q is unavailable: %w", name, err)
 	}
 	return p, nil
 }
 
-// All returns all registered providers as a name-keyed map.
+// All returns all registered providers as a name-keyed map, constructed with
+// zero-value opts (no project paths). Intended for enumeration, not production
+// backup/restore — callers that need project paths should use GetMultiple.
 func All() map[string]Provider {
 	registryMu.RLock()
 	factories := make(map[string]Factory, len(registry))
@@ -89,7 +101,7 @@ func All() map[string]Provider {
 
 	out := make(map[string]Provider, len(factories))
 	for k, factory := range factories {
-		p, err := factory()
+		p, err := factory(ProviderOpts{})
 		if err != nil {
 			continue
 		}
@@ -110,12 +122,12 @@ func Names() []string {
 	return names
 }
 
-// GetMultiple returns providers matching the requested names.
-// Returns an error if any requested name is not registered.
-func GetMultiple(names []string) ([]Provider, error) {
+// GetMultiple returns providers matching the requested names, all constructed
+// with the same opts. Returns an error if any requested name is not registered.
+func GetMultiple(names []string, opts ProviderOpts) ([]Provider, error) {
 	providers := make([]Provider, 0, len(names))
 	for _, name := range names {
-		p, err := Get(name)
+		p, err := Get(name, opts)
 		if err != nil {
 			return nil, err
 		}

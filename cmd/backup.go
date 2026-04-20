@@ -70,6 +70,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 
 	opts := core.BackupOptions{
 		Providers:      providers,
+		ProjectPaths:   cfg.ProjectPaths,
 		Passphrase:     getPassphrase(cmd),
 		Labels:         labels,
 		Message:        message,

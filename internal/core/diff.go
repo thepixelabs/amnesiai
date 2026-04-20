@@ -13,9 +13,10 @@ type DiffEntry = provider.DiffEntry
 
 // DiffOptions controls the diff operation.
 type DiffOptions struct {
-	BackupID   string   // compare against this backup (empty = latest)
-	Providers  []string // subset of providers to diff
-	Passphrase string   // decryption passphrase for the backup
+	BackupID     string   // compare against this backup (empty = latest)
+	Providers    []string // subset of providers to diff
+	ProjectPaths []string // per-project directories forwarded to provider constructors
+	Passphrase   string   // decryption passphrase for the backup
 }
 
 // DiffResult holds the diff output for all requested providers.
@@ -83,7 +84,9 @@ func Diff(store storage.Storage, opts DiffOptions) (*DiffResult, error) {
 	}
 
 	for _, name := range providerNames {
-		p, err := provider.Get(name)
+		p, err := provider.Get(name, provider.ProviderOpts{
+			ProjectPaths: opts.ProjectPaths,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("get provider %s: %w", name, err)
 		}

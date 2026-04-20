@@ -42,19 +42,21 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	passphrase := getPassphrase(cmd)
 
 	restoreOpts := core.RestoreOptions{
-		BackupID:   backupID,
-		Providers:  providers,
-		Passphrase: passphrase,
-		DryRun:     dryRun,
+		BackupID:     backupID,
+		Providers:    providers,
+		ProjectPaths: cfg.ProjectPaths,
+		Passphrase:   passphrase,
+		DryRun:       dryRun,
 	}
 
 	// Always do a metadata peek first (dry-run = true) so we can warn about
 	// unencrypted archives before writing any files.
 	peek, err := core.Restore(store, core.RestoreOptions{
-		BackupID:   backupID,
-		Providers:  providers,
-		Passphrase: passphrase,
-		DryRun:     true,
+		BackupID:     backupID,
+		Providers:    providers,
+		ProjectPaths: cfg.ProjectPaths,
+		Passphrase:   passphrase,
+		DryRun:       true,
 	})
 	if err != nil {
 		return fmt.Errorf("restore failed: %w", err)

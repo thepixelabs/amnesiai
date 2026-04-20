@@ -15,10 +15,11 @@ const redactedMarker = "<REDACTED:"
 
 // RestoreOptions controls the restore operation.
 type RestoreOptions struct {
-	BackupID   string   // backup to restore (empty = latest)
-	Providers  []string // subset of providers to restore (empty = all from backup)
-	Passphrase string   // decryption passphrase
-	DryRun     bool     // if true, report what would change without writing
+	BackupID     string   // backup to restore (empty = latest)
+	Providers    []string // subset of providers to restore (empty = all from backup)
+	ProjectPaths []string // per-project directories forwarded to provider constructors
+	Passphrase   string   // decryption passphrase
+	DryRun       bool     // if true, report what would change without writing
 }
 
 // RestoreResult holds the outcome of a restore operation.
@@ -112,7 +113,9 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 	// Restore through each provider.
 	totalFiles := 0
 	for provName, snapshot := range providerSnapshots {
-		p, err := provider.Get(provName)
+		p, err := provider.Get(provName, provider.ProviderOpts{
+			ProjectPaths: opts.ProjectPaths,
+		})
 		if err != nil {
 			return nil, fmt.Errorf("get provider %s for restore: %w", provName, err)
 		}
