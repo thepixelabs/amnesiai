@@ -31,7 +31,7 @@ type Metadata struct {
 	Providers []string                    `json:"providers"`
 	GitCommit string                      `json:"git_commit,omitempty"`
 	Labels    map[string]string           `json:"labels,omitempty"`
-	Message   string                      `json:"message,omitempty"`
+	Message   string                      `json:"message,omitempty"` // optional commit message override
 	Encrypted bool                        `json:"encrypted"`
 	Findings  map[string][]FindingSummary `json:"findings,omitempty"`
 }
@@ -62,16 +62,24 @@ type Storage interface {
 }
 
 // New creates a Storage implementation for the given mode and backup directory.
-// "git-local" and "git-remote" are planned for a future release; passing them
-// returns an explicit error rather than silently falling back to local-only
-// storage (which would give users a false sense that backups are being committed
-// or pushed when they are not).
+// For git-local and git-remote modes the directory must already be initialised
+// as a git repo (via InitGitLocal / InitGitRemote); New does not run git init.
 func New(mode string, backupDir string) (Storage, error) {
+	return NewWithOptions(mode, backupDir, false, nil)
+}
+
+// NewWithOptions is like New but supports additional options for git-remote mode.
+// noPush disables automatic push (--no-push / AutoPush=false).
+// tokenEnv is a slice of extra env vars (e.g. ["GH_TOKEN=xxx"]) scoped to the
+// push subcommand.
+func NewWithOptions(mode, backupDir string, noPush bool, tokenEnv []string) (Storage, error) {
 	switch mode {
 	case "local":
 		return &localStorage{dir: backupDir}, nil
-	case "git-local", "git-remote":
-		return nil, fmt.Errorf("storage mode %q is not yet implemented; use \"local\" for now", mode)
+	case "git-local":
+		return newGitLocal(backupDir), nil
+	case "git-remote":
+		return newGitRemote(backupDir, noPush, tokenEnv), nil
 	default:
 		return nil, fmt.Errorf("unsupported storage mode: %q", mode)
 	}
