@@ -9,49 +9,51 @@ import (
 	"github.com/thepixelabs/amnesiai/pkg/provider/claude"
 )
 
-// populateFakeClaudeDir creates a directory structure that mirrors ~/.claude/
-// with files that should be discovered, files that should be excluded, and
-// excluded subtrees.
+// mustWrite is a test helper that creates parent directories and writes content.
+func mustWrite(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// populateFakeClaudeDir creates a ~/.claude/-like directory for testing.
 //
 //	<base>/
-//	  CLAUDE.md                   <-- backed up
-//	  settings.json               <-- backed up
-//	  settings.local.json         <-- excluded (machine-local)
-//	  todos/                      <-- entire subtree excluded
+//	  CLAUDE.md                   <-- backed up (allowlisted)
+//	  settings.json               <-- backed up (allowlisted)
+//	  keybindings.json            <-- backed up (allowlisted)
+//	  settings.local.json         <-- excluded (not in allowlist)
+//	  unknown_file.json           <-- excluded (not in allowlist)
+//	  todos/                      <-- excluded (directories are never walked)
 //	    todo1.md
-//	  ide/                        <-- entire subtree excluded
-//	    keybindings.json
-//	  .credentials.json           <-- excluded (credential file)
-//	  projects/                   <-- entire subtree excluded
+//	  ide/                        <-- excluded (directories are never walked)
+//	    ide_state.json
+//	  .credentials.json           <-- excluded (not in allowlist)
+//	  projects/                   <-- excluded (directories are never walked)
 //	    conversation.json
-//	  statsig/                    <-- entire subtree excluded
+//	  statsig/                    <-- excluded (directories are never walked)
 //	    state.json
 func populateFakeClaudeDir(t *testing.T, base string) {
 	t.Helper()
-	mustWrite := func(path string, content string) {
-		t.Helper()
-		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-			t.Fatalf("mkdir %s: %v", filepath.Dir(path), err)
-		}
-		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-			t.Fatalf("write %s: %v", path, err)
-		}
-	}
-
-	mustWrite(filepath.Join(base, "CLAUDE.md"), "# CLAUDE\nSystem prompt here.")
-	mustWrite(filepath.Join(base, "settings.json"), `{"theme":"dark"}`)
-	mustWrite(filepath.Join(base, "settings.local.json"), `{"localOverride":true}`)
-	mustWrite(filepath.Join(base, "todos", "todo1.md"), "- [ ] task one")
-	mustWrite(filepath.Join(base, "ide", "keybindings.json"), `[]`)
-	mustWrite(filepath.Join(base, ".credentials.json"), `{"token":"secret"}`)
-	mustWrite(filepath.Join(base, "projects", "conversation.json"), `{"messages":[]}`)
-	mustWrite(filepath.Join(base, "statsig", "state.json"), `{}`)
+	mustWrite(t, filepath.Join(base, "CLAUDE.md"), "# CLAUDE\nSystem prompt here.")
+	mustWrite(t, filepath.Join(base, "settings.json"), `{"theme":"dark"}`)
+	mustWrite(t, filepath.Join(base, "keybindings.json"), `[]`)
+	mustWrite(t, filepath.Join(base, "settings.local.json"), `{"localOverride":true}`)
+	mustWrite(t, filepath.Join(base, "unknown_file.json"), `{}`)
+	mustWrite(t, filepath.Join(base, "todos", "todo1.md"), "- [ ] task one")
+	mustWrite(t, filepath.Join(base, "ide", "ide_state.json"), `{}`)
+	mustWrite(t, filepath.Join(base, ".credentials.json"), `{"token":"secret"}`)
+	mustWrite(t, filepath.Join(base, "projects", "conversation.json"), `{"messages":[]}`)
+	mustWrite(t, filepath.Join(base, "statsig", "state.json"), `{}`)
 }
 
-// TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs verifies that
-// Discover includes only the portable config files and excludes projects/,
-// statsig/, todos/, ide/, .credentials.json, and settings.local.json.
-func TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs(t *testing.T) {
+// TestDiscover_GlobalAllowlistOnly verifies that Discover returns exactly the
+// three allowlisted global files and nothing else.
+func TestDiscover_GlobalAllowlistOnly(t *testing.T) {
 	base := t.TempDir()
 	populateFakeClaudeDir(t, base)
 
@@ -61,7 +63,6 @@ func TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 
-	// Convert to relative paths for stable assertions.
 	rel := make([]string, 0, len(paths))
 	for _, abs := range paths {
 		r, _ := filepath.Rel(base, abs)
@@ -69,11 +70,7 @@ func TestDiscover_ReturnsExpectedPathsAndExcludesPrivateDirs(t *testing.T) {
 	}
 	sort.Strings(rel)
 
-	// Only the portable, non-machine-local files survive.
-	want := []string{
-		"CLAUDE.md",
-		"settings.json",
-	}
+	want := []string{"CLAUDE.md", "keybindings.json", "settings.json"}
 	sort.Strings(want)
 
 	if len(rel) != len(want) {
@@ -127,8 +124,6 @@ func TestDiscover_ExcludesAllExcludedDirs(t *testing.T) {
 
 	for _, path := range paths {
 		rel, _ := filepath.Rel(base, path)
-
-		// Check excluded directories.
 		top := rel
 		for {
 			parent := filepath.Dir(top)
@@ -140,10 +135,133 @@ func TestDiscover_ExcludesAllExcludedDirs(t *testing.T) {
 		if excluded[top] {
 			t.Errorf("Discover returned a file inside excluded directory %q: %s", top, path)
 		}
-
-		// Check excluded files.
 		if filepath.Base(rel) == "settings.local.json" {
 			t.Errorf("Discover returned settings.local.json but it must always be excluded: %s", path)
+		}
+	}
+}
+
+// TestDiscover_NonexistentDirReturnsNil verifies that Discover on a
+// nonexistent base directory returns (nil, nil) rather than an error.
+func TestDiscover_NonexistentDirReturnsNil(t *testing.T) {
+	base := filepath.Join(t.TempDir(), "does-not-exist")
+	p := claude.NewWithBaseDir(base)
+
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover on nonexistent dir: unexpected error: %v", err)
+	}
+	if paths != nil {
+		t.Errorf("Discover on nonexistent dir: got paths %v, want nil", paths)
+	}
+}
+
+// TestDiscover_PerProject_FindsCLAUDEmdAndSettings verifies that per-project
+// paths are discovered when ProjectPaths is set.
+func TestDiscover_PerProject_FindsCLAUDEmdAndSettings(t *testing.T) {
+	// Set up global ~/.claude/ dir.
+	globalBase := t.TempDir()
+	mustWrite(t, filepath.Join(globalBase, "CLAUDE.md"), "# global")
+	mustWrite(t, filepath.Join(globalBase, "settings.json"), `{}`)
+
+	// Set up a project dir with both per-project files.
+	proj := t.TempDir()
+	mustWrite(t, filepath.Join(proj, "CLAUDE.md"), "# per-project instructions")
+	mustWrite(t, filepath.Join(proj, ".claude", "settings.json"), `{"projectSetting":true}`)
+	// settings.local.json should NOT be picked up.
+	mustWrite(t, filepath.Join(proj, ".claude", "settings.local.json"), `{"machine":true}`)
+
+	p := claude.NewWithProjects(globalBase, []string{proj})
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	// Build a set of discovered absolute paths.
+	found := make(map[string]bool, len(paths))
+	for _, abs := range paths {
+		found[abs] = true
+	}
+
+	wantPresent := []string{
+		filepath.Join(globalBase, "CLAUDE.md"),
+		filepath.Join(globalBase, "settings.json"),
+		filepath.Join(proj, "CLAUDE.md"),
+		filepath.Join(proj, ".claude", "settings.json"),
+	}
+	for _, w := range wantPresent {
+		if !found[w] {
+			t.Errorf("Discover missing expected path: %s", w)
+		}
+	}
+
+	// settings.local.json must never appear.
+	localJSON := filepath.Join(proj, ".claude", "settings.local.json")
+	if found[localJSON] {
+		t.Errorf("Discover returned settings.local.json but it must be excluded: %s", localJSON)
+	}
+}
+
+// TestDiscover_PerProject_EmptyPathsLogsAndSkips verifies that an empty
+// ProjectPaths does not cause an error and simply skips per-project scanning.
+func TestDiscover_PerProject_EmptyPathsLogsAndSkips(t *testing.T) {
+	base := t.TempDir()
+	mustWrite(t, filepath.Join(base, "CLAUDE.md"), "# global")
+
+	p := claude.NewWithProjects(base, nil)
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover with empty ProjectPaths: unexpected error: %v", err)
+	}
+	// Only the global CLAUDE.md should appear.
+	if len(paths) != 1 {
+		t.Errorf("expected 1 path (global CLAUDE.md), got %d: %v", len(paths), paths)
+	}
+}
+
+// TestDiscover_PerProject_NonexistentProjectSkipped verifies that a project
+// path that does not exist is silently skipped.
+func TestDiscover_PerProject_NonexistentProjectSkipped(t *testing.T) {
+	base := t.TempDir()
+	mustWrite(t, filepath.Join(base, "CLAUDE.md"), "# global")
+
+	missing := filepath.Join(t.TempDir(), "no-such-project")
+	p := claude.NewWithProjects(base, []string{missing})
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover with missing project: unexpected error: %v", err)
+	}
+	// Only global CLAUDE.md; missing project contributes nothing.
+	for _, path := range paths {
+		if filepath.HasPrefix(path, missing) {
+			t.Errorf("Discover returned path from missing project: %s", path)
+		}
+	}
+}
+
+// TestRestore_GlobalFiles_WritesCorrectContent verifies that Restore produces
+// files with exactly the content from the snapshot for global keys.
+func TestRestore_GlobalFiles_WritesCorrectContent(t *testing.T) {
+	base := t.TempDir()
+	p := claude.NewWithBaseDir(base)
+
+	snapshot := map[string][]byte{
+		"CLAUDE.md":        []byte("# My custom prompt"),
+		"settings.json":    []byte(`{"fontSize":16}`),
+		"keybindings.json": []byte(`[{"key":"ctrl+s"}]`),
+	}
+
+	if err := p.Restore(snapshot); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	for rel, want := range snapshot {
+		got, err := os.ReadFile(filepath.Join(base, rel))
+		if err != nil {
+			t.Fatalf("read restored file %s: %v", rel, err)
+		}
+		if string(got) != string(want) {
+			t.Errorf("%s: got %q, want %q", rel, got, want)
 		}
 	}
 }
@@ -176,72 +294,33 @@ func TestRestore_WritesFilesWithCorrectPermissions(t *testing.T) {
 	}
 }
 
-// TestRestore_WritesCorrectContent verifies that Restore produces files with
-// exactly the content from the snapshot.
-func TestRestore_WritesCorrectContent(t *testing.T) {
-	base := t.TempDir()
-	p := claude.NewWithBaseDir(base)
-
-	snapshot := map[string][]byte{
-		"CLAUDE.md":     []byte("# My custom prompt"),
-		"settings.json": []byte(`{"fontSize":16}`),
-	}
-
-	if err := p.Restore(snapshot); err != nil {
-		t.Fatalf("Restore: %v", err)
-	}
-
-	for rel, want := range snapshot {
-		got, err := os.ReadFile(filepath.Join(base, rel))
-		if err != nil {
-			t.Fatalf("read restored file %s: %v", rel, err)
-		}
-		if string(got) != string(want) {
-			t.Errorf("%s: got %q, want %q", rel, got, want)
-		}
-	}
-}
-
-// TestRestore_SilentlySkipsCredentialsJSON verifies that even if
-// .credentials.json appears in a snapshot, Restore never writes it.
-func TestRestore_SilentlySkipsCredentialsJSON(t *testing.T) {
+// TestRestore_SilentlySkipsNonAllowlistedKeys verifies that keys not in the
+// allowlist (including .credentials.json) are never written.
+func TestRestore_SilentlySkipsNonAllowlistedKeys(t *testing.T) {
 	base := t.TempDir()
 	p := claude.NewWithBaseDir(base)
 
 	snapshot := map[string][]byte{
 		"settings.json":     []byte(`{}`),
 		".credentials.json": []byte(`{"token":"should-never-land"}`),
+		"settings.local.json": []byte(`{"machine":true}`),
+		"unknown.json":      []byte(`{}`),
 	}
 
 	if err := p.Restore(snapshot); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 
-	credPath := filepath.Join(base, ".credentials.json")
-	if _, err := os.Stat(credPath); err == nil {
-		t.Error("Restore wrote .credentials.json, but it must always be skipped")
-	}
-}
-
-// TestDiscover_NonexistentDirReturnsNilNil verifies that Discover on a
-// nonexistent base directory returns (nil, nil) rather than an error —
-// meaning the tool is simply not installed.
-func TestDiscover_NonexistentDirReturnsNilNil(t *testing.T) {
-	base := filepath.Join(t.TempDir(), "does-not-exist")
-	p := claude.NewWithBaseDir(base)
-
-	paths, err := p.Discover()
-	if err != nil {
-		t.Fatalf("Discover on nonexistent dir: unexpected error: %v", err)
-	}
-	if paths != nil {
-		t.Errorf("Discover on nonexistent dir: got paths %v, want nil", paths)
+	neverWrite := []string{".credentials.json", "settings.local.json", "unknown.json"}
+	for _, name := range neverWrite {
+		if _, err := os.Stat(filepath.Join(base, name)); err == nil {
+			t.Errorf("Restore wrote %s but it must always be skipped", name)
+		}
 	}
 }
 
 // TestDiff_StatusCases verifies that the claude provider's Diff method correctly
-// classifies files as unchanged, modified, added, or deleted relative to the
-// snapshot produced by Read.
+// classifies files as unchanged, modified, added, or deleted.
 func TestDiff_StatusCases(t *testing.T) {
 	t.Run("Unchanged", func(t *testing.T) {
 		base := t.TempDir()
@@ -277,7 +356,6 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		// Overwrite a known file with different content.
 		target := filepath.Join(base, "settings.json")
 		if err := os.WriteFile(target, []byte(`{"theme":"light"}`), 0600); err != nil {
 			t.Fatalf("overwrite settings.json: %v", err)
@@ -302,8 +380,11 @@ func TestDiff_StatusCases(t *testing.T) {
 	})
 
 	t.Run("Added", func(t *testing.T) {
+		// Start with only CLAUDE.md and settings.json; then add keybindings.json
+		// (which is allowlisted) so it appears as "added" in the diff.
 		base := t.TempDir()
-		populateFakeClaudeDir(t, base)
+		mustWrite(t, filepath.Join(base, "CLAUDE.md"), "# prompt")
+		mustWrite(t, filepath.Join(base, "settings.json"), `{}`)
 		p := claude.NewWithBaseDir(base)
 
 		snapshot, err := p.Read()
@@ -311,10 +392,10 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		// Write a new eligible file at the top level — not in an excluded dir.
-		newFile := filepath.Join(base, "extra.md")
-		if err := os.WriteFile(newFile, []byte("# extra notes"), 0600); err != nil {
-			t.Fatalf("write extra.md: %v", err)
+		// Now write keybindings.json — it is allowlisted so Discover will pick it up.
+		newFile := filepath.Join(base, "keybindings.json")
+		if err := os.WriteFile(newFile, []byte(`[]`), 0600); err != nil {
+			t.Fatalf("write keybindings.json: %v", err)
 		}
 
 		entries, err := p.Diff(snapshot)
@@ -323,15 +404,15 @@ func TestDiff_StatusCases(t *testing.T) {
 		}
 		found := false
 		for _, e := range entries {
-			if e.Path == "extra.md" {
+			if e.Path == "keybindings.json" {
 				found = true
 				if e.Status != "added" {
-					t.Errorf("extra.md: got status %q, want %q", e.Status, "added")
+					t.Errorf("keybindings.json: got status %q, want %q", e.Status, "added")
 				}
 			}
 		}
 		if !found {
-			t.Error("Diff did not return an entry for the newly added extra.md")
+			t.Error("Diff did not return an entry for newly added keybindings.json")
 		}
 	})
 
@@ -345,7 +426,6 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		// Delete a file that was in the snapshot.
 		target := filepath.Join(base, "settings.json")
 		if err := os.Remove(target); err != nil {
 			t.Fatalf("remove settings.json: %v", err)

@@ -6,13 +6,16 @@
 //   - Linux:   ~/.config/github-copilot/
 //   - Windows: %APPDATA%/GitHub Copilot/
 //
-// Included files:
+// Global included files:
 //   - All *.json files, including hosts.json (hostname → settings, not tokens;
 //     actual tokens are stored in the OS keychain).
 //
-// Excluded files:
+// Global excluded files:
 //   - Any file whose base name contains "token", "secret", "key",
 //     "credential", or "auth" (case-insensitive match on the file name).
+//
+// Per-project files (backed up for each path in ProjectPaths):
+//   - <project>/.github/copilot-instructions.md
 package copilot
 
 import (
@@ -82,7 +85,8 @@ var _ provider.Provider = (*Provider)(nil)
 
 // Provider implements provider.Provider for GitHub Copilot.
 type Provider struct {
-	base string // OS-specific base directory (absolute)
+	base         string   // OS-specific base directory (absolute)
+	projectPaths []string // per-project directories to scan for copilot-instructions.md
 }
 
 func init() {
@@ -91,7 +95,7 @@ func init() {
 	})
 }
 
-// New returns a new Copilot Provider.
+// New returns a new Copilot Provider with no project paths.
 func New() (*Provider, error) {
 	dir, err := baseDir()
 	if err != nil {
@@ -100,19 +104,54 @@ func New() (*Provider, error) {
 	return &Provider{base: dir}, nil
 }
 
-// NewWithBaseDir returns a Provider targeting an explicit base directory.
-// Intended for testing; production code should use New().
+// NewWithBaseDir returns a Provider targeting an explicit base directory with
+// no project paths. Intended for testing; production code should use New().
 func NewWithBaseDir(base string) *Provider {
 	return &Provider{base: base}
+}
+
+// NewWithProjects returns a Provider targeting an explicit base directory and
+// the given project paths. Intended for testing; production code should use
+// New() and set ProjectPaths via config.
+func NewWithProjects(base string, projectPaths []string) *Provider {
+	return &Provider{base: base, projectPaths: projectPaths}
 }
 
 // Name returns "copilot".
 func (p *Provider) Name() string { return "copilot" }
 
 // Discover returns absolute paths of all non-sensitive JSON files under the
-// Copilot config directory.  Returns (nil, nil) if the directory does not
-// exist.
+// Copilot config directory plus any per-project copilot-instructions.md files.
+// Returns (nil, nil) for the global section if the directory does not exist.
 func (p *Provider) Discover() ([]string, error) {
+	var paths []string
+
+	// Global Copilot config dir.
+	globalPaths, err := p.discoverGlobal()
+	if err != nil {
+		return nil, err
+	}
+	paths = append(paths, globalPaths...)
+
+	// Per-project copilot-instructions.md.
+	if len(p.projectPaths) == 0 {
+		log.Printf("copilot: no project paths configured; skipping per-project backup. " +
+			"Add via `amnesiai config set project_paths ~/code/foo,~/code/bar`")
+	}
+	for _, proj := range p.projectPaths {
+		projPaths, err := p.discoverProject(proj)
+		if err != nil {
+			log.Printf("copilot: discover project %s: %v", proj, err)
+			continue
+		}
+		paths = append(paths, projPaths...)
+	}
+
+	return paths, nil
+}
+
+// discoverGlobal returns non-sensitive JSON files from the Copilot config dir.
+func (p *Provider) discoverGlobal() ([]string, error) {
 	if _, err := os.Lstat(p.base); os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
@@ -150,7 +189,7 @@ func (p *Provider) Discover() ([]string, error) {
 			return nil
 		}
 
-		// Only back up JSON files.
+		// Only back up JSON files from the global config dir.
 		if !strings.HasSuffix(strings.ToLower(name), ".json") {
 			return nil
 		}
@@ -164,8 +203,34 @@ func (p *Provider) Discover() ([]string, error) {
 	return paths, nil
 }
 
+// discoverProject returns the copilot-instructions.md path for a project if it
+// exists.
+func (p *Provider) discoverProject(proj string) ([]string, error) {
+	proj = expandHome(proj)
+
+	info, err := os.Lstat(proj)
+	if os.IsNotExist(err) {
+		log.Printf("copilot: project path does not exist, skipping: %s", proj)
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("stat project dir %s: %w", proj, err)
+	}
+	if !info.IsDir() {
+		log.Printf("copilot: project path is not a directory, skipping: %s", proj)
+		return nil, nil
+	}
+
+	instructions := filepath.Join(proj, ".github", "copilot-instructions.md")
+	if fileExists(instructions) {
+		return []string{instructions}, nil
+	}
+	return nil, nil
+}
+
 // Read returns the current on-disk contents keyed by relative path from the
-// Copilot base directory.
+// Copilot base directory for global files, and by absolute path for per-project
+// files.
 func (p *Provider) Read() (map[string][]byte, error) {
 	absPaths, err := p.Discover()
 	if err != nil {
@@ -174,17 +239,13 @@ func (p *Provider) Read() (map[string][]byte, error) {
 
 	snapshot := make(map[string][]byte, len(absPaths))
 	for _, abs := range absPaths {
-		rel, err := filepath.Rel(p.base, abs)
-		if err != nil {
-			log.Printf("copilot: read: rel path for %s: %v", abs, err)
-			continue
-		}
+		key := p.relKey(abs)
 		data, err := os.ReadFile(abs)
 		if err != nil {
 			log.Printf("copilot: read: skipping %s: %v", abs, err)
 			continue
 		}
-		snapshot[rel] = data
+		snapshot[key] = data
 	}
 	return snapshot, nil
 }
@@ -231,27 +292,101 @@ func (p *Provider) Diff(snapshot map[string][]byte) ([]provider.DiffEntry, error
 	return entries, nil
 }
 
-// Restore writes snapshot files back to the Copilot base directory, skipping
-// any sensitive-named files.
+// Restore writes snapshot files back to the Copilot base directory for global
+// keys, and to the absolute path for per-project keys. Sensitive-named files
+// are always skipped.
 func (p *Provider) Restore(snapshot map[string][]byte) error {
-	for rel, data := range snapshot {
-		base := filepath.Base(rel)
-		if isSensitiveFile(base) {
-			log.Printf("copilot: restore: skipping sensitive file %s", rel)
+	for key, data := range snapshot {
+		// Skip sensitive-named files regardless of source.
+		if isSensitiveFile(filepath.Base(key)) {
+			log.Printf("copilot: restore: skipping sensitive file %s", key)
 			continue
 		}
-		dest := filepath.Join(p.base, rel)
-		// Guard against path traversal: resolved dest must stay inside base.
-		if !strings.HasPrefix(filepath.Clean(dest)+string(filepath.Separator),
-			filepath.Clean(p.base)+string(filepath.Separator)) {
-			log.Printf("copilot: restore: rejecting path traversal attempt: %s", rel)
+
+		dest := p.absPath(key)
+		if dest == "" {
+			log.Printf("copilot: restore: skipping unrecognised key %q", key)
 			continue
 		}
+
+		// Guard against path traversal.
+		if !isUnder(dest, p.base) && !p.isUnderAProject(dest) {
+			log.Printf("copilot: restore: rejecting path traversal attempt: %q", key)
+			continue
+		}
+
 		if err := atomicWrite(dest, data); err != nil {
-			return fmt.Errorf("copilot: restore %s: %w", rel, err)
+			return fmt.Errorf("copilot: restore %s: %w", key, err)
 		}
 	}
 	return nil
+}
+
+// relKey converts an absolute path to the snapshot map key.
+func (p *Provider) relKey(abs string) string {
+	rel, err := filepath.Rel(p.base, abs)
+	if err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	// Per-project file — keep absolute path as key.
+	return abs
+}
+
+// absPath resolves a snapshot key to an absolute destination path.
+// Returns "" for keys that cannot be resolved safely.
+func (p *Provider) absPath(key string) string {
+	if filepath.IsAbs(key) {
+		// Per-project: must be copilot-instructions.md inside .github/.
+		if filepath.Base(key) == "copilot-instructions.md" {
+			return key
+		}
+		return ""
+	}
+	// Global key — must be a JSON file.
+	if !strings.HasSuffix(strings.ToLower(key), ".json") {
+		return ""
+	}
+	return filepath.Join(p.base, key)
+}
+
+// isUnderAProject reports whether dest is inside any configured project dir.
+func (p *Provider) isUnderAProject(dest string) bool {
+	for _, proj := range p.projectPaths {
+		proj = expandHome(proj)
+		if isUnder(dest, proj) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUnder reports whether path is inside (or equal to) dir.
+func isUnder(path, dir string) bool {
+	clean := filepath.Clean(path)
+	cleanDir := filepath.Clean(dir)
+	return clean == cleanDir ||
+		strings.HasPrefix(clean, cleanDir+string(filepath.Separator))
+}
+
+// expandHome replaces a leading "~/" with the user's home directory.
+func expandHome(path string) string {
+	if !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[2:])
+}
+
+// fileExists returns true if the path exists and is a regular file.
+func fileExists(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
 }
 
 // atomicWrite creates parent directories then writes data to dest atomically.

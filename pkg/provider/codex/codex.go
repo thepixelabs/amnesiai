@@ -2,13 +2,13 @@
 // configuration.
 //
 // Backed-up paths under ~/.codex/:
-//   - config.json
-//   - instructions.md
-//   - themes/  (all files, recursively) — if present
+//   - agents/*.toml  (agent definitions)
+//   - rules/default.rules
 //
 // Excluded:
 //   - Any file whose base name ends in ".key" or contains "token" or
 //     "credential" (case-insensitive).
+//   - Everything else not in the allowlist above.
 package codex
 
 import (
@@ -23,12 +23,21 @@ import (
 	"github.com/thepixelabs/amnesiai/internal/provider"
 )
 
-// allowedTopLevel is the set of file names and directory names directly under
+// allowedTopLevel is the set of directory names and file names directly under
 // ~/.codex/ that are in scope for backup.
+//
+// agents/ contains agent definition TOML files. rules/ contains rule files.
+// Both directories are walked; see Discover for the file-level filters applied
+// inside each.
 var allowedTopLevel = map[string]bool{
-	"config.json":     true,
-	"instructions.md": true,
-	"themes":          true,
+	"agents": true,
+	"rules":  true,
+}
+
+// allowedRulesFiles is the explicit set of files inside rules/ that are backed
+// up. Keeping this narrow prevents backing up machine-local rule caches.
+var allowedRulesFiles = map[string]bool{
+	"default.rules": true,
 }
 
 // isExcludedFile reports whether a file base name matches the codex exclusion
@@ -129,12 +138,26 @@ func (p *Provider) Discover() ([]string, error) {
 		}
 
 		if d.IsDir() {
-			return nil // descend into allowed subdirs (e.g. themes/)
+			return nil // descend into allowed subdirs
 		}
 
-		// Skip excluded files.
+		// Skip excluded files (credential / key material).
 		if isExcludedFile(d.Name()) {
 			return nil
+		}
+
+		// Apply per-directory file filters.
+		switch topLevel {
+		case "agents":
+			// Only back up TOML agent definitions.
+			if !strings.HasSuffix(strings.ToLower(d.Name()), ".toml") {
+				return nil
+			}
+		case "rules":
+			// Only back up the default rules file.
+			if !allowedRulesFiles[d.Name()] {
+				return nil
+			}
 		}
 
 		paths = append(paths, path)
@@ -213,14 +236,40 @@ func (p *Provider) Diff(snapshot map[string][]byte) ([]provider.DiffEntry, error
 	return entries, nil
 }
 
-// Restore writes snapshot files back under ~/.codex/, skipping excluded files.
+// Restore writes snapshot files back under ~/.codex/, enforcing the same
+// allowlist that Discover uses. Files that would not be discovered are silently
+// skipped rather than returned as errors.
 func (p *Provider) Restore(snapshot map[string][]byte) error {
 	for rel, data := range snapshot {
-		base := filepath.Base(rel)
-		if isExcludedFile(base) {
+		name := filepath.Base(rel)
+
+		// Reject credential / key material.
+		if isExcludedFile(name) {
 			log.Printf("codex: restore: skipping excluded file %s", rel)
 			continue
 		}
+
+		// Enforce top-level allowlist.
+		topLevel := strings.SplitN(rel, string(filepath.Separator), 2)[0]
+		if !allowedTopLevel[topLevel] {
+			log.Printf("codex: restore: skipping non-allowlisted path %s", rel)
+			continue
+		}
+
+		// Enforce per-directory file filters.
+		switch topLevel {
+		case "agents":
+			if !strings.HasSuffix(strings.ToLower(name), ".toml") {
+				log.Printf("codex: restore: skipping non-toml file in agents/: %s", rel)
+				continue
+			}
+		case "rules":
+			if !allowedRulesFiles[name] {
+				log.Printf("codex: restore: skipping non-allowlisted rules file: %s", rel)
+				continue
+			}
+		}
+
 		dest := filepath.Join(p.baseDir, rel)
 		// Guard against path traversal: resolved dest must stay inside baseDir.
 		if !strings.HasPrefix(filepath.Clean(dest)+string(filepath.Separator),

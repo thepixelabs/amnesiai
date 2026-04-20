@@ -19,16 +19,17 @@ type GitRemote struct {
 
 // Config holds the top-level amnesiai configuration.
 type Config struct {
-	StorageMode string    `mapstructure:"storage_mode"` // "local" | "git-local" | "git-remote"
-	BackupDir   string    `mapstructure:"backup_dir"`   // absolute path for backups
-	Providers   []string  `mapstructure:"providers"`    // ["claude","gemini","copilot","codex"] or subset
-	GitRemote   GitRemote `mapstructure:"git_remote"`
-	AutoCommit  bool      `mapstructure:"auto_commit"`  // true=commit automatically
-	AutoPush    bool      `mapstructure:"auto_push"`    // true=push automatically (git-remote only)
-	BackupCount int       `mapstructure:"backup_count"` // total successful backups taken
-	FirstRun    bool      `mapstructure:"first_run"`    // true until first successful backup
-	VerboseHelp bool      `mapstructure:"verbose_help"` // show extended help text
-	Telemetry   bool      `mapstructure:"telemetry"`    // opt-in usage telemetry
+	StorageMode  string    `mapstructure:"storage_mode"`  // "local" | "git-local" | "git-remote"
+	BackupDir    string    `mapstructure:"backup_dir"`    // absolute path for backups
+	Providers    []string  `mapstructure:"providers"`     // ["claude","gemini","copilot","codex"] or subset
+	GitRemote    GitRemote `mapstructure:"git_remote"`
+	AutoCommit   bool      `mapstructure:"auto_commit"`   // true=commit automatically
+	AutoPush     bool      `mapstructure:"auto_push"`     // true=push automatically (git-remote only)
+	BackupCount  int       `mapstructure:"backup_count"`  // total successful backups taken
+	FirstRun     bool      `mapstructure:"first_run"`     // true until first successful backup
+	VerboseHelp  bool      `mapstructure:"verbose_help"`  // show extended help text
+	Telemetry    bool      `mapstructure:"telemetry"`     // opt-in usage telemetry
+	ProjectPaths []string  `mapstructure:"project_paths"` // per-project dirs to scan for CLAUDE.md, copilot-instructions.md
 }
 
 // DefaultProviders returns the full list of supported provider names.
@@ -91,6 +92,7 @@ func Load(v *viper.Viper) (Config, error) {
 	v.SetDefault("first_run", true)
 	v.SetDefault("verbose_help", false)
 	v.SetDefault("telemetry", false)
+	v.SetDefault("project_paths", []string{})
 
 	// Unmarshal into a zero-value struct so that viper's effective value for
 	// each key (file > env > default) is written without interference from
@@ -121,6 +123,7 @@ func SaveTo(cfg Config, cfgPath string) error {
 	v.Set("first_run", cfg.FirstRun)
 	v.Set("verbose_help", cfg.VerboseHelp)
 	v.Set("telemetry", cfg.Telemetry)
+	v.Set("project_paths", cfg.ProjectPaths)
 
 	if err := v.WriteConfigAs(cfgPath); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
