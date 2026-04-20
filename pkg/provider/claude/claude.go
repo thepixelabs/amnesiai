@@ -1,23 +1,23 @@
 // Package claude implements the amnesiai Provider for Claude Code configuration.
 //
-// Backed-up paths under ~/.claude/:
+// Global files backed up from ~/.claude/:
 //   - CLAUDE.md
 //   - settings.json
 //   - keybindings.json  (if present)
 //
-// Explicitly excluded (never read, never restored):
-//   - projects/             (conversation history / PII)
-//   - statsig/              (internal telemetry state)
-//   - todos/                (ephemeral task lists — not portable)
-//   - ide/                  (machine-local IDE integration state)
-//   - .credentials.json     (credential file — never touch)
-//   - settings.local.json   (machine-local override — not portable)
+// Per-project files backed up for each path in ProjectPaths:
+//   - <project>/CLAUDE.md
+//   - <project>/.claude/settings.json  (NOT settings.local.json — machine-specific)
+//
+// Everything else under ~/.claude/ is intentionally ignored. This allowlist
+// approach is safer than a blocklist: new Claude Code features that add state
+// directories (todos/, ide/, statsig/, etc.) are excluded by default rather
+// than silently backed up.
 package claude
 
 import (
 	"bytes"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 	"path/filepath"
@@ -26,20 +26,12 @@ import (
 	"github.com/thepixelabs/amnesiai/internal/provider"
 )
 
-// excludedDirs are subdirectory names under ~/.claude/ that must never be
-// traversed.  Checked against the base name of each directory entry.
-var excludedDirs = map[string]bool{
-	"projects": true,
-	"statsig":  true,
-	"todos":    true,
-	"ide":      true,
-}
-
-// excludedFiles are specific file names that must never be backed up or
-// restored, regardless of where they appear in the tree.
-var excludedFiles = map[string]bool{
-	".credentials.json":   true,
-	"settings.local.json": true,
+// globalAllowlist is the set of file names directly under ~/.claude/ that
+// are in scope for backup. Any other top-level entry is ignored.
+var globalAllowlist = map[string]bool{
+	"CLAUDE.md":        true,
+	"settings.json":    true,
+	"keybindings.json": true,
 }
 
 // Compile-time assertion: *Provider must satisfy the provider.Provider interface.
@@ -47,7 +39,8 @@ var _ provider.Provider = (*Provider)(nil)
 
 // Provider implements provider.Provider for Claude Code.
 type Provider struct {
-	baseDir string // absolute path to ~/.claude/
+	baseDir      string   // absolute path to ~/.claude/
+	projectPaths []string // absolute paths to per-project directories to scan
 }
 
 func init() {
@@ -56,7 +49,8 @@ func init() {
 	})
 }
 
-// New returns a new Claude Provider targeting ~/.claude/.
+// New returns a new Claude Provider targeting ~/.claude/ with no project paths.
+// Call NewWithProjects to include per-project files.
 func New() (*Provider, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -65,19 +59,58 @@ func New() (*Provider, error) {
 	return &Provider{baseDir: filepath.Join(home, ".claude")}, nil
 }
 
-// NewWithBaseDir returns a Provider targeting an explicit base directory.
-// Intended for testing; production code should use New().
+// NewWithBaseDir returns a Provider targeting an explicit base directory with
+// no project paths. Intended for testing; production code should use New() or
+// NewWithProjects().
 func NewWithBaseDir(baseDir string) *Provider {
 	return &Provider{baseDir: baseDir}
+}
+
+// NewWithProjects returns a Provider targeting baseDir for global config and
+// the given projectPaths for per-project files. Intended for testing;
+// production code should use New() and set ProjectPaths via config.
+func NewWithProjects(baseDir string, projectPaths []string) *Provider {
+	return &Provider{baseDir: baseDir, projectPaths: projectPaths}
 }
 
 // Name returns "claude".
 func (p *Provider) Name() string { return "claude" }
 
 // Discover returns the absolute paths of all files managed by this provider.
-// If ~/.claude/ does not exist the method returns (nil, nil) — the tool is
-// simply not installed on this machine.
+// If ~/.claude/ does not exist the global section returns nothing — the tool
+// is simply not installed on this machine. If ProjectPaths is empty, per-project
+// scanning is skipped with a log message.
 func (p *Provider) Discover() ([]string, error) {
+	var paths []string
+
+	// Global ~/.claude/ files.
+	globalPaths, err := p.discoverGlobal()
+	if err != nil {
+		return nil, err
+	}
+	paths = append(paths, globalPaths...)
+
+	// Per-project files.
+	if len(p.projectPaths) == 0 {
+		log.Printf("claude: no project paths configured; skipping per-project backup. " +
+			"Add via `amnesiai config set project_paths ~/code/foo,~/code/bar`")
+	}
+	for _, proj := range p.projectPaths {
+		projPaths, err := p.discoverProject(proj)
+		if err != nil {
+			// Log and continue — one bad project path shouldn't abort the whole backup.
+			log.Printf("claude: discover project %s: %v", proj, err)
+			continue
+		}
+		paths = append(paths, projPaths...)
+	}
+
+	return paths, nil
+}
+
+// discoverGlobal returns absolute paths of allowed files under ~/.claude/.
+// Returns nil (not an error) if the directory does not exist.
+func (p *Provider) discoverGlobal() ([]string, error) {
 	if _, err := os.Lstat(p.baseDir); os.IsNotExist(err) {
 		return nil, nil
 	} else if err != nil {
@@ -85,55 +118,73 @@ func (p *Provider) Discover() ([]string, error) {
 	}
 
 	var paths []string
-	err := filepath.WalkDir(p.baseDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// Log and skip entries we cannot stat (e.g. permission denied).
-			log.Printf("claude: discover: skipping %s: %v", path, err)
-			return nil
+	entries, err := os.ReadDir(p.baseDir)
+	if err != nil {
+		return nil, fmt.Errorf("claude: read base dir: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue // all directories under ~/.claude/ are excluded
 		}
-
 		// Never follow symlinks.
-		info, statErr := os.Lstat(path)
-		if statErr != nil {
-			log.Printf("claude: discover: lstat %s: %v", path, statErr)
-			return nil
+		info, err := e.Info()
+		if err != nil {
+			log.Printf("claude: discover global: info %s: %v", e.Name(), err)
+			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil
+			continue
 		}
-
-		if d.IsDir() {
-			if path == p.baseDir {
-				return nil // continue into the base dir itself
-			}
-			if excludedDirs[d.Name()] {
-				return filepath.SkipDir
-			}
-			return nil
+		if !globalAllowlist[e.Name()] {
+			continue
 		}
-
-		// It's a regular file.
-		rel, relErr := filepath.Rel(p.baseDir, path)
-		if relErr != nil {
-			return nil
-		}
-		// Skip credential files anywhere in the tree.
-		if excludedFiles[filepath.Base(rel)] {
-			return nil
-		}
-
-		paths = append(paths, path)
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("claude: walk: %w", err)
+		paths = append(paths, filepath.Join(p.baseDir, e.Name()))
 	}
 	return paths, nil
 }
 
-// Read returns the current on-disk contents of all discovered files, keyed by
-// path relative to ~/.claude/.  Files that cannot be read are skipped with a
-// warning.
+// discoverProject returns the per-project files for a single project directory.
+// Candidates:
+//   - <proj>/CLAUDE.md
+//   - <proj>/.claude/settings.json  (NOT settings.local.json)
+func (p *Provider) discoverProject(proj string) ([]string, error) {
+	// Resolve ~ in the project path.
+	proj = expandHome(proj)
+
+	info, err := os.Lstat(proj)
+	if os.IsNotExist(err) {
+		log.Printf("claude: project path does not exist, skipping: %s", proj)
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("stat project dir %s: %w", proj, err)
+	}
+	if !info.IsDir() {
+		log.Printf("claude: project path is not a directory, skipping: %s", proj)
+		return nil, nil
+	}
+
+	var paths []string
+
+	// <proj>/CLAUDE.md
+	claudeMD := filepath.Join(proj, "CLAUDE.md")
+	if fileExists(claudeMD) {
+		paths = append(paths, claudeMD)
+	}
+
+	// <proj>/.claude/settings.json (NOT settings.local.json)
+	settingsJSON := filepath.Join(proj, ".claude", "settings.json")
+	if fileExists(settingsJSON) {
+		paths = append(paths, settingsJSON)
+	}
+
+	return paths, nil
+}
+
+// Read returns the current on-disk contents of all discovered files. Global
+// files are keyed by path relative to ~/.claude/ (e.g. "CLAUDE.md"). Per-
+// project files are keyed by their absolute path to avoid ambiguity across
+// multiple projects.
 func (p *Provider) Read() (map[string][]byte, error) {
 	absPaths, err := p.Discover()
 	if err != nil {
@@ -142,17 +193,13 @@ func (p *Provider) Read() (map[string][]byte, error) {
 
 	snapshot := make(map[string][]byte, len(absPaths))
 	for _, abs := range absPaths {
-		rel, err := filepath.Rel(p.baseDir, abs)
-		if err != nil {
-			log.Printf("claude: read: rel path for %s: %v", abs, err)
-			continue
-		}
+		key := p.relKey(abs)
 		data, err := os.ReadFile(abs)
 		if err != nil {
 			log.Printf("claude: read: skipping %s: %v", abs, err)
 			continue
 		}
-		snapshot[rel] = data
+		snapshot[key] = data
 	}
 	return snapshot, nil
 }
@@ -165,7 +212,6 @@ func (p *Provider) Diff(snapshot map[string][]byte) ([]provider.DiffEntry, error
 		return nil, err
 	}
 
-	// Collect the union of all relative paths.
 	seen := make(map[string]bool)
 	for k := range current {
 		seen[k] = true
@@ -201,37 +247,98 @@ func (p *Provider) Diff(snapshot map[string][]byte) ([]provider.DiffEntry, error
 	return entries, nil
 }
 
-// Restore writes every file in snapshot back under ~/.claude/, creating parent
-// directories (mode 0700) as needed.  Each write is atomic: content is written
-// to a .amnesiai.tmp sibling then renamed into place.  Credential files are
-// silently skipped even if present in the snapshot.
+// Restore writes every file in snapshot back to disk. Global files (keys
+// relative to ~/.claude/) are written under baseDir. Per-project files (keys
+// that are absolute paths) are written directly to those paths. The allowlist
+// is enforced: only known-safe files are ever written.
 func (p *Provider) Restore(snapshot map[string][]byte) error {
-	for rel, data := range snapshot {
-		// Guard: never restore credential files.
-		base := filepath.Base(rel)
-		if excludedFiles[base] {
-			log.Printf("claude: restore: skipping credential file %s", rel)
+	for key, data := range snapshot {
+		dest := p.absPath(key)
+		if dest == "" {
+			log.Printf("claude: restore: skipping unrecognised key %q", key)
 			continue
 		}
-		// Guard: never restore into excluded directories.
-		parts := strings.SplitN(rel, string(filepath.Separator), 2)
-		if len(parts) > 0 && excludedDirs[parts[0]] {
-			log.Printf("claude: restore: skipping excluded dir entry %s", rel)
-			continue
-		}
-
-		dest := filepath.Join(p.baseDir, rel)
-		// Guard against path traversal: resolved dest must stay inside baseDir.
-		if !strings.HasPrefix(filepath.Clean(dest)+string(filepath.Separator),
-			filepath.Clean(p.baseDir)+string(filepath.Separator)) {
-			log.Printf("claude: restore: rejecting path traversal attempt: %s", rel)
+		// Guard against path traversal.
+		if !isUnder(dest, p.baseDir) && !p.isUnderAProject(dest) {
+			log.Printf("claude: restore: rejecting path traversal attempt: %q", key)
 			continue
 		}
 		if err := atomicWrite(dest, data); err != nil {
-			return fmt.Errorf("claude: restore %s: %w", rel, err)
+			return fmt.Errorf("claude: restore %s: %w", key, err)
 		}
 	}
 	return nil
+}
+
+// relKey converts an absolute discovered path to the snapshot map key.
+// Global files get a relative key ("CLAUDE.md"); per-project files keep their
+// absolute path as-is to avoid collisions across projects.
+func (p *Provider) relKey(abs string) string {
+	rel, err := filepath.Rel(p.baseDir, abs)
+	if err == nil && !strings.HasPrefix(rel, "..") {
+		return rel
+	}
+	// Not under baseDir — must be a per-project file; use absolute path as key.
+	return abs
+}
+
+// absPath resolves a snapshot key back to an absolute path for writing.
+// Returns "" if the key cannot be resolved safely.
+func (p *Provider) absPath(key string) string {
+	if filepath.IsAbs(key) {
+		// Per-project absolute key. Only allowed if it matches a known project file.
+		base := filepath.Base(key)
+		if base == "CLAUDE.md" || (base == "settings.json" && strings.Contains(key, "/.claude/")) {
+			return key
+		}
+		return ""
+	}
+	// Global relative key — must be in the allowlist.
+	if !globalAllowlist[filepath.Base(key)] {
+		return ""
+	}
+	return filepath.Join(p.baseDir, key)
+}
+
+// isUnderAProject reports whether dest is a known per-project file path.
+func (p *Provider) isUnderAProject(dest string) bool {
+	for _, proj := range p.projectPaths {
+		proj = expandHome(proj)
+		if isUnder(dest, proj) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUnder reports whether path is inside (or equal to) the given directory.
+func isUnder(path, dir string) bool {
+	clean := filepath.Clean(path)
+	cleanDir := filepath.Clean(dir)
+	return clean == cleanDir ||
+		strings.HasPrefix(clean, cleanDir+string(filepath.Separator))
+}
+
+// expandHome replaces a leading "~/" with the user's home directory.
+func expandHome(path string) string {
+	if !strings.HasPrefix(path, "~/") {
+		return path
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return path
+	}
+	return filepath.Join(home, path[2:])
+}
+
+// fileExists returns true if the path exists and is a regular file (not a dir
+// or symlink).
+func fileExists(path string) bool {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return false
+	}
+	return info.Mode().IsRegular()
 }
 
 // atomicWrite creates parent directories then writes data to dest via a
@@ -247,7 +354,6 @@ func atomicWrite(dest string, data []byte) error {
 		return fmt.Errorf("write tmp %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, dest); err != nil {
-		// Best-effort cleanup of the orphaned tmp file.
 		_ = os.Remove(tmp)
 		return fmt.Errorf("rename %s -> %s: %w", tmp, dest, err)
 	}

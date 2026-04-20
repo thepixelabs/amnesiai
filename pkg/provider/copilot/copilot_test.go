@@ -90,7 +90,7 @@ func TestCopilotDiscover_IncludesHostsJSON(t *testing.T) {
 }
 
 // TestCopilotDiscover_ReturnsOnlyNonSensitiveJSONFiles verifies the complete
-// set of discovered files against expected inclusions and exclusions.
+// set of discovered global files against expected inclusions and exclusions.
 func TestCopilotDiscover_ReturnsOnlyNonSensitiveJSONFiles(t *testing.T) {
 	base := t.TempDir()
 	populateFakeCopilotDir(t, base)
@@ -132,6 +132,94 @@ func TestCopilotDiscover_NonexistentDirReturnsNilNil(t *testing.T) {
 	}
 	if len(paths) != 0 {
 		t.Errorf("Discover on nonexistent dir: got paths %v, want empty", paths)
+	}
+}
+
+// TestCopilotDiscover_PerProject_FindsCopilotInstructions verifies that
+// <project>/.github/copilot-instructions.md is discovered when ProjectPaths is
+// configured and the file exists.
+func TestCopilotDiscover_PerProject_FindsCopilotInstructions(t *testing.T) {
+	globalBase := t.TempDir()
+
+	// One project with the file, one without.
+	projWith := t.TempDir()
+	projWithout := t.TempDir()
+
+	instrPath := filepath.Join(projWith, ".github", "copilot-instructions.md")
+	if err := os.MkdirAll(filepath.Dir(instrPath), 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(instrPath, []byte("# Copilot rules"), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	p := copilot.NewWithProjects(globalBase, []string{projWith, projWithout})
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+
+	found := false
+	for _, path := range paths {
+		if path == instrPath {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Discover did not return copilot-instructions.md at %s", instrPath)
+	}
+
+	// projWithout should contribute nothing.
+	for _, path := range paths {
+		if strings.HasPrefix(path, projWithout) {
+			t.Errorf("Discover returned path from project without instructions file: %s", path)
+		}
+	}
+}
+
+// TestCopilotDiscover_PerProject_EmptyPathsSkips verifies that an empty
+// ProjectPaths does not cause an error and simply skips per-project scanning.
+func TestCopilotDiscover_PerProject_EmptyPathsSkips(t *testing.T) {
+	base := t.TempDir()
+	populateFakeCopilotDir(t, base)
+
+	p := copilot.NewWithProjects(base, nil)
+	paths, err := p.Discover()
+	if err != nil {
+		t.Fatalf("Discover with empty ProjectPaths: unexpected error: %v", err)
+	}
+	// All returned paths should be inside the global base dir.
+	for _, path := range paths {
+		if !strings.HasPrefix(path, base) {
+			t.Errorf("expected all paths under %s, got: %s", base, path)
+		}
+	}
+}
+
+// TestCopilotRestore_PerProject_WritesInstructions verifies that a per-project
+// copilot-instructions.md key (absolute path) is restored correctly.
+func TestCopilotRestore_PerProject_WritesInstructions(t *testing.T) {
+	globalBase := t.TempDir()
+	proj := t.TempDir()
+
+	instrPath := filepath.Join(proj, ".github", "copilot-instructions.md")
+	content := []byte("# restored instructions")
+
+	p := copilot.NewWithProjects(globalBase, []string{proj})
+	snapshot := map[string][]byte{
+		instrPath: content,
+	}
+
+	if err := p.Restore(snapshot); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	got, err := os.ReadFile(instrPath)
+	if err != nil {
+		t.Fatalf("read restored file: %v", err)
+	}
+	if string(got) != string(content) {
+		t.Errorf("content mismatch: got %q, want %q", got, content)
 	}
 }
 
