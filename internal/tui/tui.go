@@ -338,6 +338,8 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return SelectedMsg{Action: ActionList} }
 		case "c":
 			return m, func() tea.Msg { return SelectedMsg{Action: ActionCompletion} }
+		case "s":
+			return m, func() tea.Msg { return SelectedMsg{Action: ActionSettings} }
 		case "q", "ctrl+c":
 			return m, tea.Quit
 		}
