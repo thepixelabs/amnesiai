@@ -58,14 +58,14 @@ type SettingsModel struct {
 	infoMessage string // transient line shown after a toggle
 }
 
-// menuEntry pairs the label shown in the UI with its action code.
-type menuEntry struct {
+// settingsEntry pairs the label shown in the UI with its action code.
+type settingsEntry struct {
 	label  string
 	action SettingsAction
 }
 
 // buildEntries constructs the settings menu entries, incorporating live toggle state.
-func buildEntries(cfg config.Config) []menuEntry {
+func buildEntries(cfg config.Config) []settingsEntry {
 	verboseLabel := "Verbose help: OFF"
 	if cfg.VerboseHelp {
 		verboseLabel = "Verbose help: ON"
@@ -74,7 +74,7 @@ func buildEntries(cfg config.Config) []menuEntry {
 	if cfg.Telemetry {
 		telemetryLabel = "Telemetry: ON"
 	}
-	return []menuEntry{
+	return []settingsEntry{
 		{"Re-run onboarding wizard", SettingsActionRerunOnboard},
 		{"View config file path", SettingsActionViewConfig},
 		{verboseLabel, SettingsActionToggleVerbose},
