@@ -1,4 +1,4 @@
-## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.4...v1.1.0) (2026-04-19)
+## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.5...v1.1.0) (2026-04-19)
 
 ### Added
 
@@ -40,6 +40,12 @@
 * **Claude provider no longer backs up** `~/.claude/todos/`, `~/.claude/ide/`, or `~/.claude/settings.local.json`.
 
 ---
+
+## [1.0.5](https://github.com/thepixelabs/amnesiai/compare/v1.0.4...v1.0.5) (2026-04-17)
+
+### Bug Fixes
+
+* **docs:** correct wordmark spelling, consolidate theme toggle, trim footer ([07b161f](https://github.com/thepixelabs/amnesiai/commit/07b161f66a72fbc85e93b46021b8c21cb57f3ac7))
 
 ## [1.0.4](https://github.com/thepixelabs/amnesiai/compare/v1.0.3...v1.0.4) (2026-04-17)
 
