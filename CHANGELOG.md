@@ -1,3 +1,13 @@
+## [1.2.0](https://github.com/thepixelabs/amnesiai/compare/v1.1.0...v1.2.0) (2026-04-20)
+
+### Features
+
+* **track-e:** onboarding wizard, settings menu, state.json app-owned store ([f0cb332](https://github.com/thepixelabs/amnesiai/commit/f0cb33232826775ca4519437e1698379f2f92ffa))
+
+### Bug Fixes
+
+* **track-e:** wire BindRemote, stderr capture, async account discovery, schema guard ([7ee5859](https://github.com/thepixelabs/amnesiai/commit/7ee585942dc71c991fe9ea0d98ed51586f864c08))
+
 ## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.5...v1.1.0) (2026-04-20)
 
 ### Features
