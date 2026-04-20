@@ -44,8 +44,17 @@ type Provider struct {
 }
 
 func init() {
-	provider.RegisterFactory("claude", func() (provider.Provider, error) {
-		return New()
+	provider.RegisterFactory("claude", func(o provider.ProviderOpts) (provider.Provider, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return nil, fmt.Errorf("claude: cannot determine home directory: %w", err)
+		}
+		baseDir := filepath.Join(home, ".claude")
+		if len(o.ProjectPaths) == 0 {
+			log.Printf("claude: no project paths configured; skipping per-project backup. " +
+				"Add via `amnesiai config set project_paths ~/code/foo,~/code/bar`")
+		}
+		return &Provider{baseDir: baseDir, projectPaths: o.ProjectPaths}, nil
 	})
 }
 
@@ -91,10 +100,6 @@ func (p *Provider) Discover() ([]string, error) {
 	paths = append(paths, globalPaths...)
 
 	// Per-project files.
-	if len(p.projectPaths) == 0 {
-		log.Printf("claude: no project paths configured; skipping per-project backup. " +
-			"Add via `amnesiai config set project_paths ~/code/foo,~/code/bar`")
-	}
 	for _, proj := range p.projectPaths {
 		projPaths, err := p.discoverProject(proj)
 		if err != nil {

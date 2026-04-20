@@ -37,9 +37,10 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := core.DiffOptions{
-		BackupID:   backupID,
-		Providers:  providers,
-		Passphrase: getPassphrase(cmd),
+		BackupID:     backupID,
+		Providers:    providers,
+		ProjectPaths: cfg.ProjectPaths,
+		Passphrase:   getPassphrase(cmd),
 	}
 
 	result, err := core.Diff(store, opts)

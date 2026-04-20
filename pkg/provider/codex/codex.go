@@ -68,7 +68,7 @@ type Provider struct {
 }
 
 func init() {
-	provider.RegisterFactory("codex", func() (provider.Provider, error) {
+	provider.RegisterFactory("codex", func(_ provider.ProviderOpts) (provider.Provider, error) {
 		return New()
 	})
 }

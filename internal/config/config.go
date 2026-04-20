@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -170,6 +171,15 @@ func Validate(cfg Config) error {
 			// ok
 		default:
 			return fmt.Errorf("unknown provider %q", p)
+		}
+	}
+
+	for _, p := range cfg.ProjectPaths {
+		if p == "/" {
+			return fmt.Errorf("project_paths: %q is not allowed", p)
+		}
+		if !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
+			return fmt.Errorf("project_paths: %q must be an absolute path or start with ~", p)
 		}
 	}
 

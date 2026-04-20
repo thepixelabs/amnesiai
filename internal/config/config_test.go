@@ -212,12 +212,13 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 			URL:    "https://github.com/example/cfg.git",
 			Branch: "backup",
 		},
-		AutoCommit:  false,
-		AutoPush:    true,
-		BackupCount: 42,
-		FirstRun:    false,
-		VerboseHelp: true,
-		Telemetry:   true,
+		AutoCommit:   false,
+		AutoPush:     true,
+		BackupCount:  42,
+		FirstRun:     false,
+		VerboseHelp:  true,
+		Telemetry:    true,
+		ProjectPaths: []string{"/home/user/project-a", "/home/user/project-b"},
 	}
 
 	// Save using a viper instance pointed at our temp path.
@@ -265,5 +266,14 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	}
 	if got.Telemetry != want.Telemetry {
 		t.Errorf("Telemetry: got %v, want %v", got.Telemetry, want.Telemetry)
+	}
+	if len(got.ProjectPaths) != len(want.ProjectPaths) {
+		t.Errorf("ProjectPaths length: got %d, want %d (%v)", len(got.ProjectPaths), len(want.ProjectPaths), got.ProjectPaths)
+	} else {
+		for i := range want.ProjectPaths {
+			if got.ProjectPaths[i] != want.ProjectPaths[i] {
+				t.Errorf("ProjectPaths[%d]: got %q, want %q", i, got.ProjectPaths[i], want.ProjectPaths[i])
+			}
+		}
 	}
 }

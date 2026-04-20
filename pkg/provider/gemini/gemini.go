@@ -55,7 +55,7 @@ type Provider struct {
 }
 
 func init() {
-	provider.RegisterFactory("gemini", func() (provider.Provider, error) {
+	provider.RegisterFactory("gemini", func(_ provider.ProviderOpts) (provider.Provider, error) {
 		return New()
 	})
 }
