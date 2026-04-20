@@ -22,16 +22,16 @@ func TestNew_ModeRouting(t *testing.T) {
 			wantErr:      false,
 		},
 		{
-			name:         "GitLocalReturnsError",
+			name:         "GitLocalReturnsStorage",
 			mode:         "git-local",
-			wantNilStore: true,
-			wantErr:      true,
+			wantNilStore: false,
+			wantErr:      false,
 		},
 		{
-			name:         "GitRemoteReturnsError",
+			name:         "GitRemoteReturnsStorage",
 			mode:         "git-remote",
-			wantNilStore: true,
-			wantErr:      true,
+			wantNilStore: false,
+			wantErr:      false,
 		},
 		{
 			name:         "UnknownReturnsError",

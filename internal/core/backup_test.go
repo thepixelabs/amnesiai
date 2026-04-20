@@ -1,6 +1,9 @@
 package core_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"strings"
 	"testing"
 
@@ -532,13 +535,11 @@ func TestBackupWithEncryption_SecretsAreLossless(t *testing.T) {
 		t.Fatalf("Backup (encrypted): %v", err)
 	}
 
-	// Verify findings are reported.
 	findings, ok := result.Findings["testprovider"]
 	if !ok || len(findings) == 0 {
 		t.Fatalf("expected findings for encrypted backup, got: %v", result.Findings)
 	}
 
-	// Decrypt and extract — the raw key must survive intact.
 	files, _ := loadDecryptExtract(t, store, result.ID, passphrase)
 	content, ok := files["testprovider/config/env"]
 	if !ok {
@@ -578,11 +579,9 @@ func TestBackupNoEncryptForceNoEncrypt_RedactionPresent(t *testing.T) {
 	if !ok {
 		t.Fatal("archive missing testprovider/config/env")
 	}
-	// Raw key must be gone.
 	if strings.Contains(string(content), key) {
 		t.Errorf("unencrypted archive still contains raw key: %q", content)
 	}
-	// Placeholder must be present.
 	if !strings.Contains(string(content), "<REDACTED:") {
 		t.Errorf("unencrypted archive missing <REDACTED:> placeholder: %q", content)
 	}
@@ -602,13 +601,12 @@ func TestBackupNoEncrypt_SecretsFound_ReturnsError(t *testing.T) {
 		Providers:      []string{"testprovider"},
 		Passphrase:     "",
 		NoEncrypt:      true,
-		ForceNoEncrypt: false, // must NOT be set for guard to trigger
+		ForceNoEncrypt: false,
 	})
 	if err == nil {
 		t.Fatal("expected error when --no-encrypt and secrets found without --force-no-encrypt, got nil")
 	}
 
-	// Verify no backup was written to storage.
 	entries, listErr := store.List()
 	if listErr != nil {
 		t.Fatalf("store.List: %v", listErr)
@@ -657,9 +655,80 @@ func TestBackupStoredFindings_PopulatedInMetadata(t *testing.T) {
 	if s.SecretHash == "" {
 		t.Error("FindingSummary.SecretHash is empty; expected hex SHA-256 of the raw secret")
 	}
-	// SHA-256 produces 32 bytes → 64 hex characters.
 	if len(s.SecretHash) != 64 {
 		t.Errorf("SecretHash length = %d, want 64 (hex SHA-256)", len(s.SecretHash))
+	}
+}
+
+// ─── Path-traversal tests (Track F) ───────────────────────────────────────────
+
+// craftMaliciousTar builds a raw tar.gz archive containing an entry whose name
+// is designed to escape the destination root (../../etc/passwd style).
+func craftMaliciousTar(t *testing.T, entryName string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	content := []byte("pwned")
+	hdr := &tar.Header{
+		Name: entryName,
+		Size: int64(len(content)),
+		Mode: 0644,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatalf("craftMaliciousTar WriteHeader: %v", err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatalf("craftMaliciousTar Write: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("craftMaliciousTar tw.Close: %v", err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatalf("craftMaliciousTar gw.Close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestExtractArchive_PathTraversalRejected verifies that ExtractArchive refuses
+// tar entries whose names would resolve outside the destination root.
+func TestExtractArchive_PathTraversalRejected(t *testing.T) {
+	cases := []struct {
+		name      string
+		entryName string
+	}{
+		{"DotDotSlash", "../../etc/passwd"},
+		{"DotDotPrefix", "../secret"},
+		{"AbsolutePath", "/etc/passwd"},
+		{"DeepDotDot", "a/b/../../../../etc/shadow"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := craftMaliciousTar(t, tc.entryName)
+			_, _, err := core.ExtractArchive(payload)
+			if err == nil {
+				t.Errorf("ExtractArchive(%q): expected path-traversal error, got nil", tc.entryName)
+				return
+			}
+			if !strings.Contains(err.Error(), "illegal") {
+				t.Errorf("ExtractArchive(%q): error %q does not mention 'illegal'", tc.entryName, err.Error())
+			}
+		})
+	}
+}
+
+// TestExtractArchive_LegitimatePathAccepted verifies that normal relative paths
+// are not rejected by the path-traversal check.
+func TestExtractArchive_LegitimatePathAccepted(t *testing.T) {
+	payload := craftMaliciousTar(t, "claude/config/settings.json")
+	files, _, err := core.ExtractArchive(payload)
+	if err != nil {
+		t.Fatalf("ExtractArchive(legit path): unexpected error: %v", err)
+	}
+	if _, ok := files["claude/config/settings.json"]; !ok {
+		t.Errorf("expected entry 'claude/config/settings.json' in extracted files, got: %v", files)
 	}
 }
 
