@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/thepixelabs/amnesiai/internal/crypto"
@@ -108,6 +109,7 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		ID:        now.Format("20060102T150405Z"),
 		Timestamp: now,
 		Providers: actualProviderNames,
+		Message:   opts.Message,
 		Labels:    opts.Labels,
 	}
 
@@ -193,8 +195,20 @@ func createArchive(files []fileEntry) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// extractSentinel is a synthetic absolute path used only for path-traversal
+// validation. It is never written to disk; it acts as the "destination root"
+// against which all archive paths are checked.
+const extractSentinel = "/amnesiai-extract-root"
+
 // ExtractArchive unpacks a tar.gz archive and returns a map of archive path to content,
 // plus the manifest entries for path mapping.
+//
+// Path-traversal safety: every entry's resolved path is checked to remain
+// inside the synthetic sentinel root. Entries whose cleaned path escapes the
+// root (via "..", absolute paths, or symlinks-to-outside) are rejected with an
+// error. No bytes are written to disk — this function is in-memory only — but
+// the validation prevents callers from being tricked into writing outside a
+// destination directory when they subsequently use the returned paths.
 func ExtractArchive(payload []byte) (map[string][]byte, []ManifestEntry, error) {
 	gr, err := gzip.NewReader(bytes.NewReader(payload))
 	if err != nil {
@@ -205,6 +219,9 @@ func ExtractArchive(payload []byte) (map[string][]byte, []ManifestEntry, error) 
 	tr := tar.NewReader(gr)
 	files := make(map[string][]byte)
 
+	// safeRoot is the normalised sentinel we test every entry against.
+	safeRoot := filepath.Clean(extractSentinel) + string(os.PathSeparator)
+
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -212,6 +229,26 @@ func ExtractArchive(payload []byte) (map[string][]byte, []ManifestEntry, error) 
 		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("read tar: %w", err)
+		}
+
+		// Reject symlinks entirely — they can point outside the destination.
+		if header.Typeflag == tar.TypeSymlink || header.Typeflag == tar.TypeLink {
+			return nil, nil, fmt.Errorf("illegal entry in archive: symlink/hardlink not permitted: %s", header.Name)
+		}
+
+		// Reject absolute paths before filepath.Join sees them — filepath.Join
+		// drops the prefix when the second argument starts with "/", so an
+		// absolute entry like "/etc/passwd" would silently pass the join check.
+		if filepath.IsAbs(header.Name) {
+			return nil, nil, fmt.Errorf("illegal path in archive: %s", header.Name)
+		}
+
+		// Validate that the path cannot escape the destination root.
+		// filepath.Join cleans ".." sequences; we then check that the result
+		// remains inside safeRoot.
+		target := filepath.Join(extractSentinel, header.Name)
+		if !strings.HasPrefix(filepath.Clean(target)+string(os.PathSeparator), safeRoot) {
+			return nil, nil, fmt.Errorf("illegal path in archive: %s", header.Name)
 		}
 
 		data, err := io.ReadAll(tr)

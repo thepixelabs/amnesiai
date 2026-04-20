@@ -1,6 +1,9 @@
 package core_test
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"strings"
 	"testing"
 
@@ -504,6 +507,78 @@ func TestBackup_MetadataProvidersMatchActualProviders(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("stored metadata.Providers = %v; expected to contain %q", meta.Providers, "testprovider")
+	}
+}
+
+// ─── Path-traversal tests ─────────────────────────────────────────────────────
+
+// craftMaliciousTar builds a raw tar.gz archive containing an entry whose name
+// is designed to escape the destination root (../../etc/passwd style).
+func craftMaliciousTar(t *testing.T, entryName string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gw)
+
+	content := []byte("pwned")
+	hdr := &tar.Header{
+		Name: entryName,
+		Size: int64(len(content)),
+		Mode: 0644,
+	}
+	if err := tw.WriteHeader(hdr); err != nil {
+		t.Fatalf("craftMaliciousTar WriteHeader: %v", err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatalf("craftMaliciousTar Write: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("craftMaliciousTar tw.Close: %v", err)
+	}
+	if err := gw.Close(); err != nil {
+		t.Fatalf("craftMaliciousTar gw.Close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestExtractArchive_PathTraversalRejected verifies that ExtractArchive refuses
+// tar entries whose names would resolve outside the destination root.
+func TestExtractArchive_PathTraversalRejected(t *testing.T) {
+	cases := []struct {
+		name      string
+		entryName string
+	}{
+		{"DotDotSlash", "../../etc/passwd"},
+		{"DotDotPrefix", "../secret"},
+		{"AbsolutePath", "/etc/passwd"},
+		{"DeepDotDot", "a/b/../../../../etc/shadow"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := craftMaliciousTar(t, tc.entryName)
+			_, _, err := core.ExtractArchive(payload)
+			if err == nil {
+				t.Errorf("ExtractArchive(%q): expected path-traversal error, got nil", tc.entryName)
+				return
+			}
+			if !strings.Contains(err.Error(), "illegal") {
+				t.Errorf("ExtractArchive(%q): error %q does not mention 'illegal'", tc.entryName, err.Error())
+			}
+		})
+	}
+}
+
+// TestExtractArchive_LegitimatePathAccepted verifies that normal relative paths
+// are not rejected by the path-traversal check.
+func TestExtractArchive_LegitimatePathAccepted(t *testing.T) {
+	payload := craftMaliciousTar(t, "claude/config/settings.json")
+	files, _, err := core.ExtractArchive(payload)
+	if err != nil {
+		t.Fatalf("ExtractArchive(legit path): unexpected error: %v", err)
+	}
+	if _, ok := files["claude/config/settings.json"]; !ok {
+		t.Errorf("expected entry 'claude/config/settings.json' in extracted files, got: %v", files)
 	}
 }
 

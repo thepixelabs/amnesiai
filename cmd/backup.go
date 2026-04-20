@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/thepixelabs/amnesiai/internal/core"
+	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
 var backupCmd = &cobra.Command{
@@ -22,12 +23,18 @@ func init() {
 	backupCmd.Flags().StringSlice("providers", nil, "providers to back up (default: all configured)")
 	backupCmd.Flags().StringArray("label", nil, "labels as key=value pairs (repeatable)")
 	backupCmd.Flags().String("message", "", "commit message override (default: auto-generated)")
+	backupCmd.Flags().Bool("no-push", false, "skip automatic git push for git-remote mode")
 
 	rootCmd.AddCommand(backupCmd)
 }
 
 func runBackup(cmd *cobra.Command, args []string) error {
-	store, err := getStorage()
+	noPush, _ := cmd.Flags().GetBool("no-push")
+	// AutoPush=false in config also disables push; honour both.
+	if !cfg.AutoPush {
+		noPush = true
+	}
+	store, err := storage.NewWithOptions(cfg.StorageMode, cfg.BackupDir, noPush, nil)
 	if err != nil {
 		return err
 	}
@@ -47,7 +54,6 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 
 	message, _ := cmd.Flags().GetString("message")
-	_ = message // Will be used when git commit support is added.
 
 	opts := core.BackupOptions{
 		Providers:  providers,
