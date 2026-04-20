@@ -24,6 +24,7 @@ import (
 // BackupOptions controls the backup operation.
 type BackupOptions struct {
 	Providers      []string          // provider names to back up
+	ProjectPaths   []string          // per-project directories forwarded to provider constructors
 	Passphrase     string            // encryption passphrase (empty = no encryption)
 	Labels         map[string]string // user-defined labels
 	Message        string            // optional commit message override
@@ -50,7 +51,9 @@ type fileEntry struct {
 // Backup performs a full backup: discover files from each provider, scan for
 // secrets, archive into a tar.gz, optionally encrypt, and save to storage.
 func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
-	providers, err := provider.GetMultiple(opts.Providers)
+	providers, err := provider.GetMultiple(opts.Providers, provider.ProviderOpts{
+		ProjectPaths: opts.ProjectPaths,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("get providers: %w", err)
 	}

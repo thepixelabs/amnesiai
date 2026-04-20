@@ -90,8 +90,16 @@ type Provider struct {
 }
 
 func init() {
-	provider.RegisterFactory("copilot", func() (provider.Provider, error) {
-		return New()
+	provider.RegisterFactory("copilot", func(o provider.ProviderOpts) (provider.Provider, error) {
+		dir, err := baseDir()
+		if err != nil {
+			return nil, err
+		}
+		if len(o.ProjectPaths) == 0 {
+			log.Printf("copilot: no project paths configured; skipping per-project backup. " +
+				"Add via `amnesiai config set project_paths ~/code/foo,~/code/bar`")
+		}
+		return &Provider{base: dir, projectPaths: o.ProjectPaths}, nil
 	})
 }
 
@@ -134,10 +142,6 @@ func (p *Provider) Discover() ([]string, error) {
 	paths = append(paths, globalPaths...)
 
 	// Per-project copilot-instructions.md.
-	if len(p.projectPaths) == 0 {
-		log.Printf("copilot: no project paths configured; skipping per-project backup. " +
-			"Add via `amnesiai config set project_paths ~/code/foo,~/code/bar`")
-	}
 	for _, proj := range p.projectPaths {
 		projPaths, err := p.discoverProject(proj)
 		if err != nil {
