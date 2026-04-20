@@ -1,3 +1,13 @@
+## [1.3.0](https://github.com/thepixelabs/amnesiai/compare/v1.2.0...v1.3.0) (2026-04-20)
+
+### Features
+
+* **track-f:** git-local + git-remote storage, gh/glab integration, fix path-traversal in ExtractArchive ([2fd9ffe](https://github.com/thepixelabs/amnesiai/commit/2fd9ffe163940fb1db108ef5db0b1f21e038e455))
+
+### Bug Fixes
+
+* **track-f:** wire tokenEnv, per-push privacy, shell-injection guard, exec timeouts, token redaction, path-traversal hardening ([1253e61](https://github.com/thepixelabs/amnesiai/commit/1253e613a5d5d2a767309db8d54b4eb57fb92309))
+
 ## [1.2.0](https://github.com/thepixelabs/amnesiai/compare/v1.1.0...v1.2.0) (2026-04-20)
 
 ### Features
