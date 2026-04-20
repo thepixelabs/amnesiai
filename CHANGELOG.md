@@ -1,3 +1,13 @@
+## [1.4.0](https://github.com/thepixelabs/amnesiai/compare/v1.3.0...v1.4.0) (2026-04-20)
+
+### Features
+
+* **track-cd:** TUI refactor — thin figlet banner, arrow-key pickers, masked passphrase verify ([131f0d4](https://github.com/thepixelabs/amnesiai/commit/131f0d430cd5cffa2e9163d16d93ba26756b7aef))
+
+### Bug Fixes
+
+* **track-cd:** wire 's' hotkey to ActionSettings on main menu ([e424bd4](https://github.com/thepixelabs/amnesiai/commit/e424bd479ede92da7e2fd50c77f0a6fd46291ab3))
+
 ## [1.3.0](https://github.com/thepixelabs/amnesiai/compare/v1.2.0...v1.3.0) (2026-04-20)
 
 ### Features
