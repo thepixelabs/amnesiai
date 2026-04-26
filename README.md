@@ -256,6 +256,10 @@ amnesiai completion zsh|bash|fish
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+This project is open source distributed under the **Apache License, Version 2.0**.
+
+You may use, modify, and distribute this software for personal and internal business operations. Commercial use is permitted, provided it does not directly compete with the primary product or services offered by the repository owner.
+
+Please refer to the [`LICENSE`](LICENSE) file for the complete terms and conditions.
 
 [amnesiai.pixelabs.net](https://amnesiai.pixelabs.net) · [thepixelabs/amnesiai](https://github.com/thepixelabs/amnesiai)
