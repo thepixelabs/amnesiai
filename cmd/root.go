@@ -25,7 +25,7 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "amnesiai",
 	Short: "Back up and restore AI coding assistant configurations",
-	Long: `amnesiai is a open-source CLI that backs up and restores
+	Long: `amnesiai is an open-source CLI that backs up and restores
 configuration files for AI coding assistants including
 Claude Code, Gemini CLI, GitHub Copilot, and Codex CLI.
 

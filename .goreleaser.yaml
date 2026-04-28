@@ -48,7 +48,7 @@ brews:
       token: "{{ .Env.HOMEBREW_TAP_APP_TOKEN }}"
     homepage: "https://amnesiai.pixelabs.net"
     description: "git your ai setup — backup and restore AI coding assistant configurations"
-    license: "MIT"
+    license: "Apache-2.0"
     install: |
       bin.install "amnesiai"
     test: |
