@@ -1,3 +1,47 @@
+## 1.0.0 (2026-04-28)
+
+### Features
+
+* add CLI source, CI/CD pipelines, and release infrastructure ([ad3ba8b](https://github.com/thepixelabs/amnesiai/commit/ad3ba8b5dc382ae35ebe30394b87a3440c206053))
+* add landing page with responsive how-it-works sections ([e85b000](https://github.com/thepixelabs/amnesiai/commit/e85b00052dae5a74ed49a47f4c6c72737ea6473e))
+* **landing:** add PixelLabs nav link, dark/light/system theme toggle, restore bird icon visibility ([f854b39](https://github.com/thepixelabs/amnesiai/commit/f854b39e36b7a57d3f0bc49c8dce53951af994c3))
+* revert license to Apache 2.0 ([afdfa79](https://github.com/thepixelabs/amnesiai/commit/afdfa7980ed7749e78ec174c1d2548993180d255))
+* **track-a:** storage schema, config fields, claude security hardening ([d669ee0](https://github.com/thepixelabs/amnesiai/commit/d669ee0d1c432c1792a07fcd23da79706978c4d9))
+* **track-b:** redaction Option B + passphrase flag hardening ([2a0a609](https://github.com/thepixelabs/amnesiai/commit/2a0a609ede3545da05123a471b00b306387e9a72))
+* **track-cd:** TUI refactor — thin figlet banner, arrow-key pickers, masked passphrase verify ([131f0d4](https://github.com/thepixelabs/amnesiai/commit/131f0d430cd5cffa2e9163d16d93ba26756b7aef))
+* **track-e:** onboarding wizard, settings menu, state.json app-owned store ([f0cb332](https://github.com/thepixelabs/amnesiai/commit/f0cb33232826775ca4519437e1698379f2f92ffa))
+* **track-f:** git-local + git-remote storage, gh/glab integration, fix path-traversal in ExtractArchive ([2fd9ffe](https://github.com/thepixelabs/amnesiai/commit/2fd9ffe163940fb1db108ef5db0b1f21e038e455))
+* **track-g:** codex + copilot provider completion, per-project enumeration, claude allowlist refactor ([0abc0f0](https://github.com/thepixelabs/amnesiai/commit/0abc0f0de4487ca9534c442b1a21ecd7d173b83f))
+
+### Bug Fixes
+
+* **ci:** correct create-github-app-token SHA ([#2](https://github.com/thepixelabs/amnesiai/issues/2)) ([fbcb0e2](https://github.com/thepixelabs/amnesiai/commit/fbcb0e24fdb73e5238e7257a78e63be1905c54fe))
+* **ci:** correct lint action SHA and make vuln-scan non-blocking ([#1](https://github.com/thepixelabs/amnesiai/issues/1)) ([d946dfb](https://github.com/thepixelabs/amnesiai/commit/d946dfb9768d6e293907fe85152d7d5bb570fc17))
+* **ci:** use GH_TOKEN PAT for semantic-release ([#3](https://github.com/thepixelabs/amnesiai/issues/3)) ([b01e35a](https://github.com/thepixelabs/amnesiai/commit/b01e35ab6b37dbc64253d5ab0bf5c96851db608d)), closes [#2](https://github.com/thepixelabs/amnesiai/issues/2)
+* correct Go version badge to 1.24 ([#5](https://github.com/thepixelabs/amnesiai/issues/5)) ([2db4030](https://github.com/thepixelabs/amnesiai/commit/2db40302ad0e306a0cac766c1ec6e549e145d65c))
+* **deps:** upgrade golang.org/x/crypto to v0.50.0, add npm overrides for picomatch and brace-expansion ([bca7c24](https://github.com/thepixelabs/amnesiai/commit/bca7c2444eebe0672d9d68fd1b86a04da6ffc35f)), closes [#1-4](https://github.com/thepixelabs/amnesiai/issues/1-4) [#5-6](https://github.com/thepixelabs/amnesiai/issues/5-6)
+* **docs:** correct wordmark spelling, consolidate theme toggle, trim footer ([07b161f](https://github.com/thepixelabs/amnesiai/commit/07b161f66a72fbc85e93b46021b8c21cb57f3ac7))
+* **goreleaser:** put brew formula in Formula/ directory ([df49d9d](https://github.com/thepixelabs/amnesiai/commit/df49d9d2722851edccedb06b98794902f64cf643))
+* **goreleaser:** remove git.url block so tap push uses GitHub API ([79091e4](https://github.com/thepixelabs/amnesiai/commit/79091e4e6153c7d57d11fbf40ea83223b0b45f33))
+* retrigger v1.0.0 release ([#4](https://github.com/thepixelabs/amnesiai/issues/4)) ([cec4800](https://github.com/thepixelabs/amnesiai/commit/cec4800642a9e948c7835a4a1d3a6d9bfe2bedda))
+* **track-cd:** wire 's' hotkey to ActionSettings on main menu ([e424bd4](https://github.com/thepixelabs/amnesiai/commit/e424bd479ede92da7e2fd50c77f0a6fd46291ab3))
+* **track-e:** wire BindRemote, stderr capture, async account discovery, schema guard ([7ee5859](https://github.com/thepixelabs/amnesiai/commit/7ee585942dc71c991fe9ea0d98ed51586f864c08))
+* **track-f:** wire tokenEnv, per-push privacy, shell-injection guard, exec timeouts, token redaction, path-traversal hardening ([1253e61](https://github.com/thepixelabs/amnesiai/commit/1253e613a5d5d2a767309db8d54b4eb57fb92309))
+* **track-g:** wire ProjectPaths through provider factory, validate, log once ([45aaf38](https://github.com/thepixelabs/amnesiai/commit/45aaf3833befbc13aa1053ff60db4336ae237901))
+
+### Performance Improvements
+
+* **docs:** compress landing page images (~10MB → ~1MB) ([c530a58](https://github.com/thepixelabs/amnesiai/commit/c530a58e21506192ff6d167f7848b225751f3fb2))
+
+### Code Refactoring
+
+* rename amensiai to amnesiai + un-LFS docs images ([#6](https://github.com/thepixelabs/amnesiai/issues/6)) ([1bed3e1](https://github.com/thepixelabs/amnesiai/commit/1bed3e11fac2f1deb1f2a695a368395b23e42b6f))
+
+### Documentation
+
+* **1.1.0:** add scope policy, migration guide, update README + CHANGELOG ([6e693fa](https://github.com/thepixelabs/amnesiai/commit/6e693fa2374580158c4285738091775677c4cdd4))
+* **qa:** add test strategy for tracks A-F refactor ([9a4afda](https://github.com/thepixelabs/amnesiai/commit/9a4afdad6d11af94eb3be314207328b9f2c1d63f))
+
 ## [1.4.0](https://github.com/thepixelabs/amnesiai/compare/v1.3.0...v1.4.0) (2026-04-20)
 
 ### Features
