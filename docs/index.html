@@ -117,27 +117,230 @@
        LIGHT THEME OVERRIDES
        ===================================================== */
     [data-theme="light"] {
-      --color-bg:           #F6F8FA;
-      --color-bg-elevated:  #FFFFFF;
-      --color-border:       #D0D7DE;
-      --color-border-muted: #E6E9EE;
-      --color-text:         #1F2328;
-      --color-muted:        #636C76;
-      --color-silver:       #57606A;
-      --color-accent:       #6C63FF;
-      --color-accent-hover: #5046e5;
-      --color-cyan:         #0969DA;
-      --color-green:        #1A7F37;
-      --color-amber:        #9A6700;
+      /* Backgrounds: blueprint paper — reads as actual light blue, not white */
+      --color-bg:           #C9D4E8;
+      --color-bg-elevated:  #DCE4F2;
+      /* Borders: tuned for deeper bg */
+      --color-border:       #A4AFC6;
+      --color-border-muted: #B8C2D6;
+      /* Text */
+      --color-text:         #0E1219;
+      --color-muted:        #3D4557;
+      --color-silver:       #3D4557;
+      /* Brand — violet stays, cyan darkened for legibility on light bg */
+      --color-accent:       #5B53E8;
+      --color-accent-hover: #4A42D4;
+      --color-cyan:         #0085A3;   /* dark teal-cyan for text/icons; bright cyan kept for glows via raw values */
+      --color-green:        #0E7A3A;
+      --color-amber:        #8A5A00;
+      /* Light-mode only tokens used in component overrides below */
+      --color-glass-bg:     rgba(240, 245, 255, 0.88);
+      --color-glass-border: rgba(108, 99, 255, 0.22);
     }
-    /* light mode: nav bg */
+
+    /* ── Nav ─────────────────────────────────────────── */
     [data-theme="light"] .nav {
-      background-color: rgba(246, 248, 250, 0.85);
+      background-color: rgba(201, 212, 232, 0.92);
+      border-bottom-color: rgba(164, 175, 198, 0.8);
     }
-    /* light mode: aurora orbs lighter */
-    [data-theme="light"] .aurora-bg__orb--1 { opacity: 0.2; }
-    [data-theme="light"] .aurora-bg__orb--2 { opacity: 0.15; }
-    [data-theme="light"] .aurora-bg__orb--3 { opacity: 0.15; }
+
+    /* ── Aurora orbs — pull way back, tint warmer so they don't grey-out */
+    [data-theme="light"] .aurora-bg__orb--1 { opacity: 0.14; }
+    [data-theme="light"] .aurora-bg__orb--2 { opacity: 0.10; }
+    [data-theme="light"] .aurora-bg__orb--3 { opacity: 0.10; }
+
+    /* ── Hero background: dot-grid overlay for depth ─── */
+    [data-theme="light"] .hero {
+      background-color: var(--color-bg);
+    }
+    [data-theme="light"] .hero::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      background-image:
+        radial-gradient(circle, rgba(91, 83, 232, 0.22) 1px, transparent 1px);
+      background-size: 28px 28px;
+      -webkit-mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, black 20%, transparent 75%);
+              mask-image: radial-gradient(ellipse 85% 75% at 50% 45%, black 20%, transparent 75%);
+    }
+
+    /* ── Hero headline dim line — needs to be readable on light ── */
+    [data-theme="light"] .hero__headline .line-dim {
+      color: rgba(20, 24, 31, 0.45);
+    }
+
+    /* ── Hero eyebrow badge ── */
+    [data-theme="light"] .hero__eyebrow {
+      color: var(--color-cyan);
+      background-color: rgba(0, 133, 163, 0.08);
+      border-color: rgba(0, 133, 163, 0.25);
+    }
+    [data-theme="light"] .hero__eyebrow::before {
+      background: var(--color-cyan);
+      box-shadow: 0 0 6px var(--color-cyan);
+    }
+
+    /* ── Ghost button — light bg hover ── */
+    [data-theme="light"] .btn--ghost {
+      color: var(--color-muted);
+      border-color: var(--color-border);
+    }
+    [data-theme="light"] .btn--ghost:hover {
+      color: var(--color-text);
+      background: rgba(91, 83, 232, 0.06);
+      border-color: rgba(91, 83, 232, 0.28);
+    }
+
+    /* ── Glow divider — stays subtle on light ── */
+    [data-theme="light"] .glow-divider {
+      background: linear-gradient(90deg, transparent, rgba(91, 83, 232, 0.18), rgba(0, 133, 163, 0.12), transparent);
+    }
+
+    /* ── Glass cards (How It Works steps) ──────────────── */
+    [data-theme="light"] .how__step--vault__card,
+    [data-theme="light"] .how__step--timeline__copy,
+    [data-theme="light"] .how__step--commit__card {
+      background: var(--color-glass-bg);
+      border-color: var(--color-glass-border);
+      box-shadow:
+        0 2px 0 rgba(255,255,255,0.8) inset,
+        0 8px 32px rgba(91, 83, 232, 0.10),
+        0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    /* ── Step text shadows — remove dark-mode smoke effect ── */
+    [data-theme="light"] .how__step-title {
+      text-shadow: none;
+    }
+    [data-theme="light"] .how__step-body {
+      text-shadow: none;
+    }
+
+    /* ── Step number outlines ── */
+    [data-theme="light"] .how__step-num {
+      color: rgba(91, 83, 232, 0.14);
+      -webkit-text-stroke: 1.5px rgba(91, 83, 232, 0.55);
+    }
+    [data-theme="light"] .how__step--timeline__copy .how__step-num,
+    [data-theme="light"] .how__step--commit__card .how__step-num {
+      color: rgba(0, 133, 163, 0.14);
+      -webkit-text-stroke: 1.5px rgba(0, 133, 163, 0.55);
+    }
+
+    /* ── Inline code in step bodies ── */
+    [data-theme="light"] .how__step-body code {
+      color: var(--color-cyan);
+      background: rgba(0, 133, 163, 0.08);
+    }
+
+    /* ── Timeline grid overlay — boost opacity for light bg ── */
+    [data-theme="light"] .how__step--timeline::before {
+      background-image:
+        linear-gradient(rgba(0, 133, 163, 0.12) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 133, 163, 0.12) 1px, transparent 1px);
+    }
+
+    /* ── Timeline bottom fade — dissolve into light bg ── */
+    [data-theme="light"] .how__step--timeline__img-wrap::after {
+      background: linear-gradient(to top, var(--color-bg), transparent);
+    }
+
+    /* ── Commit step glow bg — soften on light ── */
+    [data-theme="light"] .how__step--commit::before {
+      background:
+        radial-gradient(ellipse 70% 60% at 80% 50%, rgba(91, 83, 232, 0.07) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 45% at 90% 40%, rgba(0, 133, 163, 0.05) 0%, transparent 55%);
+    }
+    [data-theme="light"] .how__step--commit::after {
+      background: radial-gradient(ellipse 80% 80% at 90% 50%, rgba(0, 133, 163, 0.04) 0%, transparent 70%);
+    }
+
+    /* ── How section — timeline tag & title accent (cyan) ── */
+    [data-theme="light"] .how__step--timeline__copy .how__step-tag,
+    [data-theme="light"] .how__step--commit__card .how__step-tag {
+      color: var(--color-cyan);
+      background: rgba(0, 133, 163, 0.07);
+      border-color: rgba(0, 133, 163, 0.20);
+    }
+    [data-theme="light"] .how__step--timeline__copy .how__step-title .title-accent,
+    [data-theme="light"] .how__step--commit__card .how__step-title .title-accent {
+      color: var(--color-cyan);
+    }
+
+    /* ── Terminal — light syntax theme ──────────────────── */
+    [data-theme="light"] .terminal {
+      background-color: #E4EAFA;
+      border-color: rgba(164, 175, 198, 0.9);
+      box-shadow:
+        0 0 0 1px rgba(91, 83, 232, 0.06) inset,
+        0 12px 40px rgba(0, 0, 0, 0.10),
+        0 0 40px rgba(91, 83, 232, 0.05);
+    }
+    [data-theme="light"] .terminal__titlebar {
+      background: rgba(210, 220, 240, 0.75);
+      border-bottom-color: rgba(164, 175, 198, 0.7);
+    }
+    [data-theme="light"] .terminal__body pre {
+      color: #1F2A3C;
+    }
+    [data-theme="light"] .t-comment { color: #8090A8; }
+    /* .t-prompt stays via --color-amber which is already overridden */
+    [data-theme="light"] .t-cmd     { color: #1F2A3C; }
+    /* .t-pkg uses --color-cyan — already overridden */
+    /* .t-flag uses --color-accent — already overridden */
+    /* .t-out uses --color-muted — already overridden */
+    [data-theme="light"] .terminal__footer {
+      background: rgba(210, 220, 240, 0.5);
+      border-top-color: rgba(164, 175, 198, 0.6);
+    }
+    [data-theme="light"] .cursor-blink {
+      background: #1F2A3C;
+    }
+
+    /* ── Nav CTA button ── */
+    [data-theme="light"] .nav__cta {
+      color: var(--color-text) !important;
+      background: rgba(91, 83, 232, 0.10);
+      border-color: rgba(91, 83, 232, 0.28);
+    }
+    [data-theme="light"] .nav__cta:hover {
+      background: rgba(91, 83, 232, 0.18) !important;
+      border-color: rgba(91, 83, 232, 0.50) !important;
+    }
+
+    /* ── Storage badges ── */
+    [data-theme="light"] .storage-card__badge {
+      background: rgba(91, 83, 232, 0.08);
+      border-color: rgba(91, 83, 232, 0.20);
+    }
+
+    /* ── Storage card hover glow top line ── */
+    [data-theme="light"] .storage-card::before {
+      background: linear-gradient(90deg, transparent, rgba(91, 83, 232, 0.30), transparent);
+    }
+
+    /* ── Mix-blend-mode images: screen works on dark bg,
+          multiply works on light bg — swap it ── */
+    [data-theme="light"] .how__step--vault__img,
+    [data-theme="light"] .how__step--timeline__img,
+    [data-theme="light"] .how__step--commit__img {
+      mix-blend-mode: multiply;
+    }
+
+    /* ── Mascot glow: soften on light ── */
+    [data-theme="light"] .mascot {
+      filter:
+        drop-shadow(0 20px 48px rgba(91, 83, 232, 0.14))
+        drop-shadow(0 0 120px rgba(91, 83, 232, 0.07));
+    }
+
+    /* ── Theme toggle pill ── */
+    [data-theme="light"] .theme-toggle {
+      background: var(--color-bg-elevated);
+      border-color: var(--color-border);
+    }
 
     /* =====================================================
        RESET & BASE
@@ -2307,19 +2510,26 @@
     }());
 
     // -------------------------------------------------------
-    // Nav background solidify on scroll
+    // Nav background solidify on scroll (theme-aware)
     // -------------------------------------------------------
     (function () {
       var nav = document.querySelector('.nav');
       if (!nav) return;
       var handler = function () {
+        var isLight = document.documentElement.getAttribute('data-theme') === 'light';
         if (window.scrollY > 20) {
-          nav.style.backgroundColor = 'rgba(13, 17, 23, 0.96)';
+          nav.style.backgroundColor = isLight
+            ? 'rgba(238, 241, 248, 0.97)'
+            : 'rgba(13, 17, 23, 0.96)';
         } else {
-          nav.style.backgroundColor = 'rgba(13, 17, 23, 0.75)';
+          nav.style.backgroundColor = '';   /* let CSS rule take over */
         }
       };
       window.addEventListener('scroll', handler, { passive: true });
+      /* Re-run on theme change so a mid-scroll theme switch looks right */
+      document.documentElement.addEventListener('DOMAttrModified', handler);
+      /* MutationObserver fallback for browsers that don't fire DOMAttrModified */
+      new MutationObserver(handler).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     }());
 
     // ── Theme toggle (system / light / dark) ──────────────────────────
