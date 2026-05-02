@@ -1,3 +1,9 @@
+## [1.1.2](https://github.com/thepixelabs/amnesiai/compare/v1.1.1...v1.1.2) (2026-05-02)
+
+### Bug Fixes
+
+* **deps:** bump go to 1.25.9, pin actions to SHA, patch picomatch ([b0a1a17](https://github.com/thepixelabs/amnesiai/commit/b0a1a1796eab7f33c32ddda30f9c13d522d384ea)), closes [#6](https://github.com/thepixelabs/amnesiai/issues/6)
+
 ## [1.1.1](https://github.com/thepixelabs/amnesiai/compare/v1.1.0...v1.1.1) (2026-05-02)
 
 ### Bug Fixes
