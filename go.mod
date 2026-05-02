@@ -2,6 +2,8 @@ module github.com/thepixelabs/amnesiai
 
 go 1.25.0
 
+toolchain go1.25.9
+
 require (
 	filippo.io/age v1.2.1
 	github.com/charmbracelet/bubbletea v1.3.10
