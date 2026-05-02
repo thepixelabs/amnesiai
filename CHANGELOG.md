@@ -1,3 +1,10 @@
+## [1.1.0](https://github.com/thepixelabs/amnesiai/compare/v1.0.0...v1.1.0) (2026-05-02)
+
+### Features
+
+* **docs:** light-mode landing page redesign with blueprint-paper theme ([3c8dfdd](https://github.com/thepixelabs/amnesiai/commit/3c8dfddec5fbb966d7558dd05d9b00a084d5bb89)), closes [#C9D4E8](https://github.com/thepixelabs/amnesiai/issues/C9D4E8)
+* **onboarding:** wire git-remote storage mode into wizard + auto-init remote ([d6b70e9](https://github.com/thepixelabs/amnesiai/commit/d6b70e981222b652ec88ff33d692f4db6cf04c15))
+
 ## 1.0.0 (2026-04-28)
 
 ### Features
