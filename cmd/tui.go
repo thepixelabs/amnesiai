@@ -123,8 +123,14 @@ func tuiLoop(cmd *cobra.Command) error {
 //
 // Skip rules:
 //   - If the user aborts (ctrl+c), FirstRun stays true so the wizard triggers again.
-//   - If the wizard completed but the user didn't run a backup, FirstRun stays
-//     true. Only a completed backup (via incrementBackupCount) flips FirstRun.
+//   - If the wizard completes, FirstRun is flipped to false so the wizard does
+//     not re-trigger on next launch.
+//
+// When the user chose git-remote, this function calls storage.InitGitRemote to
+// wire up the remote repository.  On failure it prints a warning and degrades
+// to git-local so the user is never left in a broken half-configured state.
+// FirstRun is set to false regardless of the InitGitRemote outcome so the
+// wizard does not re-run on the next launch.
 func runOnboardingFlow() error {
 	result, err := internaltui.RunOnboarding()
 	if err != nil {
@@ -137,6 +143,24 @@ func runOnboardingFlow() error {
 
 	cfg.StorageMode = result.StorageMode
 	cfg.Telemetry = result.Telemetry
+	cfg.FirstRun = false
+
+	// When git-remote was chosen, initialise the remote before persisting.
+	if result.StorageMode == "git-remote" {
+		url, initErr := storage.InitGitRemote(storage.InitGitRemoteOptions{
+			Dir:        cfg.BackupDir,
+			RepoURL:    result.RemoteURL,
+			CreateRepo: result.CreateRepo,
+			RepoName:   result.RepoName,
+		})
+		if initErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: git-remote setup failed: %v\n", initErr)
+			fmt.Fprintf(os.Stderr, "         Falling back to git-local; run `amnesiai init --mode git-remote` later.\n")
+			cfg.StorageMode = "git-local"
+		} else {
+			cfg.GitRemote.URL = url
+		}
+	}
 
 	st, _ := config.LoadState()
 	if st != nil {

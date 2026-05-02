@@ -69,3 +69,6 @@ testdata/output/
 
 # goreleaser local config override
 .goreleaser.local.yaml
+
+# Added by Dispatch — local agent coordination files
+.tasks/
