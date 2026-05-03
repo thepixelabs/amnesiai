@@ -72,3 +72,6 @@ testdata/output/
 
 # Added by Dispatch — local agent coordination files
 .tasks/
+
+# Local MCP server config — never version-controlled
+.mcp.json

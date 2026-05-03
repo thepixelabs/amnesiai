@@ -20,12 +20,12 @@ import (
 //go:embed assets/banner.txt
 var bannerRaw string
 
-// ─── Ocean palette — matches altergo's "ocean" theme ─────────────────────────
+// ─── Ocean palette ───────────────────────────────────────────────────────────
 
 const (
-	ColorCyan   = "#00d7ff" // altergo grad stop 0 — electric cyan
-	ColorBlue   = "#005fd7" // altergo grad stop 1 — slate blue
-	ColorIndigo = "#8787ff" // altergo brand/accent — indigo
+	ColorCyan   = "#00d7ff" // ocean palette grad stop 0 — electric cyan
+	ColorBlue   = "#005fd7" // ocean palette grad stop 1 — slate blue
+	ColorIndigo = "#8787ff" // ocean palette brand/accent — indigo
 	ColorGreen  = "#5faf5f" // success
 	ColorAmber  = "#ffaf00" // warning
 	ColorRed    = "#ff5f5f" // error

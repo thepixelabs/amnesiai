@@ -2,7 +2,7 @@
 
 **Status:** Authoritative  
 **Audience:** Contributors, security auditors, users evaluating trust  
-**Note:** This is an internal engineering policy document, not a legal instrument. It codifies team decisions for auditability. It has not been reviewed by legal counsel and does not constitute legal advice.
+**Note:** This document is provided for transparency — it is not a legal instrument. It codifies team decisions for auditability. It has not been reviewed by legal counsel and does not constitute legal advice.
 
 ---
 

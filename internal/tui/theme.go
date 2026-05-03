@@ -7,7 +7,7 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// Hex colour stops — match the altergo "ocean" theme.
+// Hex colour stops — ocean palette.
 const (
 	wCyan      = "#00d7ff" // electric cyan — gradient stop 0, prompt accent
 	wBlue      = "#005fd7" // slate blue    — gradient stop 1

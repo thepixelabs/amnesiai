@@ -1,6 +1,6 @@
 // Package cmd — TUI entry point for amnesiai.
 //
-// Visual style mirrors the altergo Python library:
+// Visual style (ocean palette, greeting cadence) was adapted from an internal Python tool:
 //   - Pre-rendered thin figlet ASCII-art banner with a left-to-right ocean gradient.
 //   - Time-of-day greeting keyed to hour windows.
 //   - Arrow-key navigation (↑↓) through menu items with single-letter hotkeys.

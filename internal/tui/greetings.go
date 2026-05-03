@@ -27,7 +27,7 @@ var greetingWindows = []struct {
 }
 
 // greetingBank is keyed by window id with developer-themed quips.
-// Same structure and hour windows as altergo_greetings.py.
+// Same structure and hour windows as the original Python implementation.
 var greetingBank = map[string][]Greeting{
 	"dead_of_night": {
 		{"🌑", "Midnight configs still need saving."},
@@ -97,7 +97,7 @@ func windowForHour(hour int) string {
 }
 
 // PickGreeting returns the greeting for the current time, stable per-minute
-// (same seeding strategy as altergo_greetings.py: seed = int(time.time()//60)).
+// (same seeding strategy as the original Python implementation: seed = int(time.time()//60)).
 func PickGreeting() Greeting {
 	now := time.Now()
 	window := windowForHour(now.Hour())
