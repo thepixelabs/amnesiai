@@ -54,9 +54,6 @@ type WizardResult struct {
 	// RepoName is the repository name to pass to gh/glab for creation.
 	// Only meaningful when CreateRepo==true.
 	RepoName string
-
-	// Telemetry is true when the user opted in to anonymous usage telemetry.
-	Telemetry bool
 }
 
 // ─── Wizard steps ─────────────────────────────────────────────────────────────
@@ -71,7 +68,6 @@ const (
 	stepGRRepoChoice                    // use existing URL or create new repo
 	stepGRRepoInput                     // text input: URL or repo name
 	stepPassphraseNote                  // advisory — no choice needed
-	stepTelemetry                       // toggle on/off
 	stepDone                            // sentinel
 )
 
@@ -301,12 +297,6 @@ func (m OnboardingModel) commit() (OnboardingModel, tea.Cmd) {
 		m.cursor = 0
 
 	case stepPassphraseNote:
-		m.step = stepTelemetry
-		m.cursor = 0 // cursor 0 = ON (shown first; arrow down for OFF)
-
-	case stepTelemetry:
-		// cursor 0 = ON, cursor 1 = OFF
-		m.result.Telemetry = m.cursor == 0
 		m.result.Completed = true
 		m.step = stepDone
 		return m, tea.Quit
@@ -384,8 +374,6 @@ func (m OnboardingModel) currentChoiceCount() int {
 		return 0 // text input — no arrow choices
 	case stepPassphraseNote:
 		return 1
-	case stepTelemetry:
-		return 2
 	}
 	return 1
 }
@@ -413,8 +401,6 @@ func (m OnboardingModel) View() string {
 		m.renderGRRepoInput(&sb)
 	case stepPassphraseNote:
 		m.renderPassphraseNote(&sb)
-	case stepTelemetry:
-		m.renderTelemetry(&sb)
 	case stepDone:
 		sb.WriteString(wSuccess.Render("  Setup complete.") + "\n")
 	}
@@ -530,15 +516,6 @@ func (m OnboardingModel) renderPassphraseNote(sb *strings.Builder) {
 	sb.WriteString(wNormal.Render("  prompted on every run.  Leave it unset to enter interactively.") + "\n\n")
 	sb.WriteString(wMuted.Render("  Tip: export AMNESIAI_PASSPHRASE=\"…\" in your shell profile.") + "\n\n")
 	m.renderChoice(sb, 0, "Got it — continue")
-}
-
-func (m OnboardingModel) renderTelemetry(sb *strings.Builder) {
-	sb.WriteString(wPrompt.Render("  Anonymous usage telemetry") + "\n\n")
-	sb.WriteString(wNormal.Render("  Enabling telemetry sends anonymous usage counts (no file paths,") + "\n")
-	sb.WriteString(wNormal.Render("  no config values) to help prioritise features.") + "\n\n")
-
-	m.renderChoice(sb, 0, "Enable telemetry")
-	m.renderChoice(sb, 1, "Keep OFF")
 }
 
 // renderChoice renders a single selectable item.

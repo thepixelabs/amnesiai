@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/thepixelabs/amnesiai/internal/config"
+	providerregistry2 "github.com/thepixelabs/amnesiai/internal/provider"
 	"github.com/thepixelabs/amnesiai/internal/storage"
 )
 
@@ -33,8 +34,7 @@ It supports multiple storage modes (local, git-local, git-remote),
 age encryption, secret scanning, and intelligent git commit messages.`,
 	Example: `  amnesiai
   amnesiai backup --providers claude,gemini
-  amnesiai restore --id 20240416T143022
-  amnesiai completion zsh`,
+  amnesiai restore --id 20240416T143022`,
 	Args:          cobra.NoArgs,
 	SilenceUsage:  true,
 	SilenceErrors: true,
@@ -50,6 +50,10 @@ func Execute() error {
 }
 
 func init() {
+	// Suppress Cobra's auto-generated `completion` subcommand; shell completion
+	// is intentionally not a supported feature.
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
+
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default ~/.amnesiai/config.toml)")
 	rootCmd.PersistentFlags().String("storage-mode", "", "storage mode: local, git-local, git-remote")
 	rootCmd.PersistentFlags().String("backup-dir", "", "backup directory path")
@@ -168,6 +172,56 @@ func getNoEncrypt(cmd *cobra.Command) bool {
 }
 
 // getStorage creates a Storage backend from the current configuration.
+//
+// Defensively auto-inits a git-local repo when the configured mode is git-local
+// or git-remote but the directory hasn't been initialised yet (e.g. user
+// hand-edited config.toml, or onboarding ran before the init bugfix).
+// InitGitLocal is idempotent — it returns nil immediately if the dir is already
+// a git repo. For git-remote we only init the local repo here; attaching a
+// remote remains a deliberate `amnesiai init` action.
 func getStorage() (storage.Storage, error) {
+	if err := ensureGitInitIfNeeded(); err != nil {
+		return nil, err
+	}
 	return storage.New(cfg.StorageMode, cfg.BackupDir)
+}
+
+// buildProviderOverrides converts user-facing config.ProviderOverride entries
+// into the internal provider.ProviderOverride type expected by the registry,
+// emitting a stderr warning (but no error) for any provider name in the
+// config that the registry doesn't know about. Stale config should not brick
+// the binary — we just tell the user we ignored the entry.
+func buildProviderOverrides() map[string]providerregistry2.ProviderOverride {
+	if len(cfg.ProviderOverrides) == 0 {
+		return nil
+	}
+	known := make(map[string]bool, 8)
+	for _, name := range providerregistry2.Names() {
+		known[name] = true
+	}
+	out := make(map[string]providerregistry2.ProviderOverride, len(cfg.ProviderOverrides))
+	for name, ov := range cfg.ProviderOverrides {
+		if !known[name] {
+			fmt.Fprintf(os.Stderr,
+				"warning: provider_overrides entry for unknown provider %q ignored\n", name)
+			continue
+		}
+		out[name] = providerregistry2.ProviderOverride{
+			ExtraFiles:   append([]string(nil), ov.ExtraFiles...),
+			ExcludeFiles: append([]string(nil), ov.ExcludeFiles...),
+		}
+	}
+	return out
+}
+
+// ensureGitInitIfNeeded auto-inits the local repo when the storage mode is
+// git-y but the dir isn't a git repo yet.
+func ensureGitInitIfNeeded() error {
+	if cfg.StorageMode != "git-local" && cfg.StorageMode != "git-remote" {
+		return nil
+	}
+	if err := storage.InitGitLocal(cfg.BackupDir); err != nil {
+		return fmt.Errorf("auto-init backup repo: %w", err)
+	}
+	return nil
 }

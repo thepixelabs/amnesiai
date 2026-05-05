@@ -144,10 +144,10 @@ func maxF(a, b float64) float64 {
 
 // ─── Provider picker model ────────────────────────────────────────────────────
 
-// ProviderPickerDoneMsg is sent by the picker when the user presses Enter.
-type ProviderPickerDoneMsg struct {
-	Selected []string
-}
+// ErrCancelled is returned by TUI sub-flows when the user backs out (q / ctrl+c
+// / Esc) instead of confirming.  Callers should treat it as "return to caller's
+// menu silently" — no error message to print.
+var ErrCancelled = fmt.Errorf("cancelled by user")
 
 // ProviderPickerModel is a Bubbletea model for arrow-key + space multi-select
 // of providers.  Selection marker is · (U+00B7 middle-dot).
@@ -155,6 +155,7 @@ type ProviderPickerModel struct {
 	Available []string
 	chosen    map[int]bool
 	cursor    int
+	cancelled bool
 }
 
 // NewProviderPickerModel creates a picker with the given available providers and
@@ -199,16 +200,18 @@ func (m ProviderPickerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "n": // deselect all
 			m.chosen = make(map[int]bool, len(m.Available))
 		case "enter":
-			sel := m.SelectedProviders()
-			return m, func() tea.Msg {
-				return ProviderPickerDoneMsg{Selected: sel}
-			}
-		case "q", "ctrl+c":
+			return m, tea.Quit
+		case "q", "ctrl+c", "esc":
+			m.cancelled = true
 			return m, tea.Quit
 		}
 	}
 	return m, nil
 }
+
+// Cancelled reports whether the user backed out (q / ctrl+c / esc) instead of
+// pressing Enter to confirm.
+func (m ProviderPickerModel) Cancelled() bool { return m.cancelled }
 
 func (m ProviderPickerModel) View() string {
 	var sb strings.Builder
@@ -251,31 +254,31 @@ func (m ProviderPickerModel) SelectedProviders() []string {
 type MenuAction int
 
 const (
-	ActionNone       MenuAction = iota
-	ActionBackup                // b — run backup flow
-	ActionRestore               // r — run restore flow
-	ActionDiff                  // d — run diff flow
-	ActionList                  // l — run list flow
-	ActionCompletion            // c — show completion help
-	ActionSettings              // s — open settings menu
-	ActionQuit                  // q — exit
+	ActionNone     MenuAction = iota
+	ActionBackup              // b — run backup flow
+	ActionRestore             // r — run restore flow
+	ActionDiff                // d — run diff flow
+	ActionList                // l — run list flow
+	ActionSettings            // s — open settings menu
+	ActionQuit                // q — exit
 )
 
-// menuEntry pairs a display label, hotkey, and action.
+// menuEntry pairs a display label, hotkey, and action.  The description is
+// shown beneath the label when the verbose-help setting is on.
 type menuEntry struct {
-	hotkey string
-	label  string
-	action MenuAction
+	hotkey      string
+	label       string
+	description string
+	action      MenuAction
 }
 
 var menuEntries = []menuEntry{
-	{"b", "Backup providers", ActionBackup},
-	{"r", "Restore a backup", ActionRestore},
-	{"d", "Diff against a backup", ActionDiff},
-	{"l", "List backups", ActionList},
-	{"c", "Completion help", ActionCompletion},
-	{"s", "Settings", ActionSettings},
-	{"q", "Quit", ActionQuit},
+	{"b", "Backup providers", "Snapshot your AI assistant configs and save them locally or to git.", ActionBackup},
+	{"r", "Restore a backup", "Apply a saved backup to disk, or extract it to a sandbox dir for inspection.", ActionRestore},
+	{"d", "Diff against a backup", "Compare your current configs against a backup — show what's added, modified, or deleted.", ActionDiff},
+	{"l", "List backups", "Show all backups with their timestamps, providers, labels, and messages.", ActionList},
+	{"s", "Settings", "Re-run onboarding, view config path, view remote bindings, toggle verbose help.", ActionSettings},
+	{"q", "Quit", "Exit amnesiai.", ActionQuit},
 }
 
 // SelectedMsg carries the chosen action when the user presses Enter or a hotkey.
@@ -289,14 +292,17 @@ type MenuModel struct {
 	Width    int
 	Height   int
 	version  string
+	verbose  bool // when true, render each menu entry's description line
 }
 
 // NewMenuModel creates a menu model with a fresh time-of-day greeting.
-func NewMenuModel(version string) MenuModel {
+// When verbose is true each menu entry shows a one-line description below it.
+func NewMenuModel(version string, verbose bool) MenuModel {
 	return MenuModel{
 		cursor:   0,
 		Greeting: PickGreeting(),
 		version:  version,
+		verbose:  verbose,
 	}
 }
 
@@ -336,8 +342,6 @@ func (m MenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, func() tea.Msg { return SelectedMsg{Action: ActionDiff} }
 		case "l":
 			return m, func() tea.Msg { return SelectedMsg{Action: ActionList} }
-		case "c":
-			return m, func() tea.Msg { return SelectedMsg{Action: ActionCompletion} }
 		case "s":
 			return m, func() tea.Msg { return SelectedMsg{Action: ActionSettings} }
 		case "q", "ctrl+c":
@@ -374,6 +378,9 @@ func (m MenuModel) View() string {
 			sb.WriteString("  " + hotkey + " " + label)
 		}
 		sb.WriteRune('\n')
+		if m.verbose && entry.description != "" {
+			sb.WriteString("       " + MutedStyle.Render(entry.description) + "\n")
+		}
 	}
 	sb.WriteRune('\n')
 

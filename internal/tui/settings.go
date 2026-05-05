@@ -5,7 +5,6 @@
 //   - Re-run onboarding wizard
 //   - View config file path
 //   - Toggle verbose help (config.VerboseHelp)
-//   - Toggle telemetry  (config.Telemetry, default OFF)
 //   - View state.json remote bindings
 package tui
 
@@ -24,21 +23,28 @@ import (
 type SettingsAction int
 
 const (
-	SettingsActionNone         SettingsAction = iota
-	SettingsActionRerunOnboard                // re-run the onboarding wizard
-	SettingsActionViewConfig                  // display config file path
-	SettingsActionToggleVerbose               // flip config.VerboseHelp
-	SettingsActionToggleTelemetry             // flip config.Telemetry
-	SettingsActionViewBindings                // display state.json remote_bindings
-	SettingsActionBack                        // return to main menu
+	SettingsActionNone              SettingsAction = iota
+	SettingsActionRerunOnboard                     // re-run the onboarding wizard
+	SettingsActionViewConfig                       // display config file path
+	SettingsActionToggleVerbose                    // flip config.VerboseHelp
+	SettingsActionPickProviders                    // change cfg.Providers (default backup set)
+	SettingsActionToggleBackupFiles                // flip config.BackupShowFiles
+	SettingsActionViewBindings                     // display state.json remote_bindings
+	SettingsActionToggleAutoPrune                  // flip config.Retention.AutoPrune
+	SettingsActionEditRetention                    // open the retention editor (keep_last + max_age_days)
+	SettingsActionPruneNow                         // run prune against current policy
+	SettingsActionBack                             // return to main menu
 )
 
 // SettingsResult is returned by the settings menu when it exits.
 type SettingsResult struct {
 	Action SettingsAction
-	// ToggleVerboseHelp / ToggleTelemetry carry the new desired value.
+	// NewVerboseHelp carries the new desired value for VerboseHelp.
 	NewVerboseHelp bool
-	NewTelemetry   bool
+	// NewBackupShowFiles carries the new desired value for BackupShowFiles.
+	NewBackupShowFiles bool
+	// NewAutoPrune carries the new desired value for Retention.AutoPrune.
+	NewAutoPrune bool
 }
 
 // ─── Messages ─────────────────────────────────────────────────────────────────
@@ -70,15 +76,37 @@ func buildEntries(cfg config.Config) []settingsEntry {
 	if cfg.VerboseHelp {
 		verboseLabel = "Verbose help: ON"
 	}
-	telemetryLabel := "Telemetry: OFF (recommended)"
-	if cfg.Telemetry {
-		telemetryLabel = "Telemetry: ON"
+
+	providerLabel := "Default providers: (none — every backup will prompt)"
+	if len(cfg.Providers) > 0 {
+		providerLabel = "Default providers: " + strings.Join(cfg.Providers, ", ")
 	}
+
+	backupFilesLabel := "Backup output: counts only"
+	if cfg.BackupShowFiles {
+		backupFilesLabel = "Backup output: full file list"
+	}
+
+	autoPruneLabel := "Auto-prune: OFF"
+	if cfg.Retention.AutoPrune {
+		autoPruneLabel = "Auto-prune: ON"
+	}
+
+	retentionLabel := "Retention: disabled"
+	if cfg.Retention.KeepLast > 0 || cfg.Retention.MaxAgeDays > 0 {
+		retentionLabel = fmt.Sprintf("Retention: keep last %d, max age %d days",
+			cfg.Retention.KeepLast, cfg.Retention.MaxAgeDays)
+	}
+
 	return []settingsEntry{
 		{"Re-run onboarding wizard", SettingsActionRerunOnboard},
 		{"View config file path", SettingsActionViewConfig},
+		{providerLabel, SettingsActionPickProviders},
+		{backupFilesLabel, SettingsActionToggleBackupFiles},
 		{verboseLabel, SettingsActionToggleVerbose},
-		{telemetryLabel, SettingsActionToggleTelemetry},
+		{autoPruneLabel, SettingsActionToggleAutoPrune},
+		{retentionLabel, SettingsActionEditRetention},
+		{"Prune now", SettingsActionPruneNow},
 		{"View remote bindings (state.json)", SettingsActionViewBindings},
 		{"Back to main menu", SettingsActionBack},
 	}
@@ -142,13 +170,13 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// Don't quit — let the menu re-render with updated label.
 				return m, nil
 
-			case SettingsActionToggleTelemetry:
-				m.cfg.Telemetry = !m.cfg.Telemetry
-				m.result.NewTelemetry = m.cfg.Telemetry
-				if m.cfg.Telemetry {
-					m.infoMessage = "Telemetry enabled."
+			case SettingsActionToggleBackupFiles:
+				m.cfg.BackupShowFiles = !m.cfg.BackupShowFiles
+				m.result.NewBackupShowFiles = m.cfg.BackupShowFiles
+				if m.cfg.BackupShowFiles {
+					m.infoMessage = "Backup output: full file list."
 				} else {
-					m.infoMessage = "Telemetry disabled."
+					m.infoMessage = "Backup output: counts only."
 				}
 				return m, nil
 

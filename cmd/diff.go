@@ -40,6 +40,7 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		BackupID:     backupID,
 		Providers:    providers,
 		ProjectPaths: cfg.ProjectPaths,
+		Overrides:    buildProviderOverrides(),
 		Passphrase:   getPassphrase(cmd),
 	}
 

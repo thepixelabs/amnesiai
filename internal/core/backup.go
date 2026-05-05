@@ -14,6 +14,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,13 +26,14 @@ import (
 
 // BackupOptions controls the backup operation.
 type BackupOptions struct {
-	Providers      []string          // provider names to back up
-	ProjectPaths   []string          // per-project directories forwarded to provider constructors
-	Passphrase     string            // encryption passphrase (empty = no encryption)
-	Labels         map[string]string // user-defined labels
-	Message        string            // optional commit message override
-	NoEncrypt      bool              // true when caller explicitly opted out of encryption
-	ForceNoEncrypt bool              // suppresses the secrets-found guard when NoEncrypt is true
+	Providers      []string                             // provider names to back up
+	ProjectPaths   []string                             // per-project directories forwarded to provider constructors
+	Overrides      map[string]provider.ProviderOverride // per-provider allowlist tweaks
+	Passphrase     string                               // encryption passphrase (empty = no encryption)
+	Labels         map[string]string                    // user-defined labels
+	Message        string                               // optional commit message override
+	NoEncrypt      bool                                 // true when caller explicitly opted out of encryption
+	ForceNoEncrypt bool                                 // suppresses the secrets-found guard when NoEncrypt is true
 }
 
 // BackupResult holds the outcome of a backup operation.
@@ -40,6 +42,7 @@ type BackupResult struct {
 	Timestamp time.Time
 	Providers []string
 	Findings  map[string][]scan.Finding // per-provider secret findings
+	Files     map[string][]string       // per-provider list of paths included in the archive
 }
 
 // fileEntry holds a single file's provider, relative path, and content for
@@ -55,6 +58,7 @@ type fileEntry struct {
 func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 	providers, err := provider.GetMultiple(opts.Providers, provider.ProviderOpts{
 		ProjectPaths: opts.ProjectPaths,
+		Overrides:    opts.Overrides,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("get providers: %w", err)
@@ -77,6 +81,7 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 	// are used).
 	var files []fileEntry
 	actualProviderNames := make([]string, 0, len(providers))
+	perProviderFiles := make(map[string][]string, len(providers))
 
 	for _, p := range providers {
 		actualProviderNames = append(actualProviderNames, p.Name())
@@ -84,8 +89,10 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read provider %s: %w", p.Name(), err)
 		}
+		perProviderFiles[p.Name()] = make([]string, 0, len(snapshot))
 
 		for path, data := range snapshot {
+			perProviderFiles[p.Name()] = append(perProviderFiles[p.Name()], path)
 			var archiveData []byte
 			var findings []scan.Finding
 
@@ -201,11 +208,16 @@ func Backup(store storage.Storage, opts BackupOptions) (*BackupResult, error) {
 		return nil, fmt.Errorf("save backup: %w", err)
 	}
 
+	for _, paths := range perProviderFiles {
+		sort.Strings(paths)
+	}
+
 	return &BackupResult{
 		ID:        id,
 		Timestamp: now,
 		Providers: actualProviderNames,
 		Findings:  allFindings,
+		Files:     perProviderFiles,
 	}, nil
 }
 

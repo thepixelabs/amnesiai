@@ -59,7 +59,16 @@ type Storage interface {
 
 	// Latest returns the most recent backup ID, or ErrNoBackups.
 	Latest() (string, error)
+
+	// Delete removes a backup by ID. Returns ErrNotFound if the ID does not
+	// exist. Implementations should be idempotent enough that a partially
+	// removed directory does not leak into List() results — List skips entries
+	// that are missing metadata.json, so a torn delete is recoverable.
+	Delete(id string) error
 }
+
+// ErrNotFound is returned when a backup ID does not exist.
+var ErrNotFound = errors.New("backup not found")
 
 // New creates a Storage implementation for the given mode and backup directory.
 // For git-local and git-remote modes the directory must already be initialised
@@ -161,7 +170,12 @@ func (s *localStorage) List() ([]BackupEntry, error) {
 		metaPath := filepath.Join(s.dir, entry.Name(), "metadata.json")
 		metaBytes, err := os.ReadFile(metaPath)
 		if err != nil {
-			continue // skip dirs without metadata
+			continue // skip dirs without metadata (e.g. half-deleted backup)
+		}
+		// Also require payload.bin so a torn delete (metadata gone but payload
+		// left, or vice versa) doesn't surface a half-backup.
+		if _, err := os.Stat(filepath.Join(s.dir, entry.Name(), "payload.bin")); err != nil {
+			continue
 		}
 		var meta Metadata
 		if err := json.Unmarshal(metaBytes, &meta); err != nil {
@@ -183,6 +197,35 @@ func (s *localStorage) List() ([]BackupEntry, error) {
 	})
 
 	return backups, nil
+}
+
+// Delete removes a backup directory tree. Returns ErrNotFound when the
+// directory does not exist. Other I/O failures (permissions, etc.) are
+// returned wrapped. The deletion is performed via os.RemoveAll: if it
+// crashes midway, the leftover dir will be missing one of metadata.json
+// /payload.bin and will be skipped by List.
+func (s *localStorage) Delete(id string) error {
+	if id == "" {
+		return fmt.Errorf("delete: empty backup id")
+	}
+	// Defence in depth: refuse path-escaping ids before they reach RemoveAll.
+	// A normal id is "20240416T143022Z"; reject anything containing a path
+	// separator or "..". Without this, a malicious or buggy caller could pass
+	// "../../" and wipe state outside the backup dir.
+	if filepath.Base(id) != id || id == "." || id == ".." {
+		return fmt.Errorf("delete: invalid backup id %q", id)
+	}
+	target := filepath.Join(s.dir, id)
+	if _, err := os.Stat(target); err != nil {
+		if os.IsNotExist(err) {
+			return ErrNotFound
+		}
+		return fmt.Errorf("stat backup: %w", err)
+	}
+	if err := os.RemoveAll(target); err != nil {
+		return fmt.Errorf("remove backup: %w", err)
+	}
+	return nil
 }
 
 func (s *localStorage) Latest() (string, error) {

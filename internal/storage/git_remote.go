@@ -116,6 +116,23 @@ func (s *gitRemoteStorage) Latest() (string, error) {
 	return s.local.Latest()
 }
 
+// Delete removes the backup, commits, and (when push is enabled) pushes the
+// removal. Push failures are downgraded to a stderr warning: the local prune
+// already succeeded, and a transient network problem should not surface as a
+// hard error to the user — the next successful backup will push the pending
+// removal commit anyway.
+func (s *gitRemoteStorage) Delete(id string) error {
+	if err := s.local.Delete(id); err != nil {
+		return err
+	}
+	if !s.noPush {
+		if err := gitPush(s.dir, s.tokenEnv); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: git push after prune failed (commit saved locally): %v\n", err)
+		}
+	}
+	return nil
+}
+
 // gitGetRemoteURL returns the URL of the "origin" remote, or "" if not set.
 func gitGetRemoteURL(dir string) string {
 	out, err := gitRun(dir, nil, "remote", "get-url", "origin")

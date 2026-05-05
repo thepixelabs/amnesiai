@@ -116,7 +116,7 @@ func gitCommit(dir, message string) error {
 	if err == nil && len(strings.TrimSpace(string(out))) == 0 {
 		return nil // nothing to commit
 	}
-	_, err = gitRun(dir, nil, "commit", "-m", message, "--allow-empty-message=false", "--no-gpg-sign")
+	_, err = gitRun(dir, nil, "commit", "-m", message, "--no-gpg-sign")
 	return err
 }
 

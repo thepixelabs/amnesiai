@@ -59,6 +59,24 @@ func (s *gitLocalStorage) Latest() (string, error) {
 	return s.local.Latest()
 }
 
+// Delete removes the backup directory and commits the removal. Errors during
+// the git steps still surface to the caller — the on-disk delete already
+// succeeded, so the working tree may have a pending change. We deliberately
+// do not roll back the file removal on a commit failure: the next backup will
+// stage the deletion alongside whatever else changes.
+func (s *gitLocalStorage) Delete(id string) error {
+	if err := s.local.Delete(id); err != nil {
+		return err
+	}
+	if err := gitAddAll(s.local.dir); err != nil {
+		return fmt.Errorf("git add (post-delete): %w", err)
+	}
+	if err := gitCommit(s.local.dir, fmt.Sprintf("chore: prune backup %s", id)); err != nil {
+		return fmt.Errorf("git commit (post-delete): %w", err)
+	}
+	return nil
+}
+
 // latestMetadata returns the Metadata of the most recent backup, or nil if
 // there are no backups yet.
 func (s *gitLocalStorage) latestMetadata() *Metadata {

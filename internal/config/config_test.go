@@ -217,7 +217,6 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 		BackupCount:  42,
 		FirstRun:     false,
 		VerboseHelp:  true,
-		Telemetry:    true,
 		ProjectPaths: []string{"/home/user/project-a", "/home/user/project-b"},
 	}
 
@@ -263,9 +262,6 @@ func TestSaveLoad_RoundTrip(t *testing.T) {
 	}
 	if got.VerboseHelp != want.VerboseHelp {
 		t.Errorf("VerboseHelp: got %v, want %v", got.VerboseHelp, want.VerboseHelp)
-	}
-	if got.Telemetry != want.Telemetry {
-		t.Errorf("Telemetry: got %v, want %v", got.Telemetry, want.Telemetry)
 	}
 	if len(got.ProjectPaths) != len(want.ProjectPaths) {
 		t.Errorf("ProjectPaths length: got %d, want %d (%v)", len(got.ProjectPaths), len(want.ProjectPaths), got.ProjectPaths)

@@ -20,10 +20,13 @@ import (
 
 // mockProvider is a minimal in-memory Provider used only in tests.
 // It stores a fixed snapshot that Backup reads and Restore writes back into.
+// readErr / restoreErr allow tests to inject failures.
 type mockProvider struct {
-	name     string
-	snapshot map[string][]byte
-	restored map[string][]byte // last snapshot passed to Restore
+	name       string
+	snapshot   map[string][]byte
+	restored   map[string][]byte // last snapshot passed to Restore
+	readErr    error
+	restoreErr error
 }
 
 func (m *mockProvider) Name() string { return m.name }
@@ -37,6 +40,9 @@ func (m *mockProvider) Discover() ([]string, error) {
 }
 
 func (m *mockProvider) Read() (map[string][]byte, error) {
+	if m.readErr != nil {
+		return nil, m.readErr
+	}
 	out := make(map[string][]byte, len(m.snapshot))
 	for k, v := range m.snapshot {
 		out[k] = v
@@ -82,6 +88,19 @@ func (m *mockProvider) Diff(snap map[string][]byte) ([]provider.DiffEntry, error
 }
 
 func (m *mockProvider) Restore(snap map[string][]byte) error {
+	if m.restoreErr != nil {
+		return m.restoreErr
+	}
+	m.restored = snap
+	return nil
+}
+
+// RestoreTo implements provider.Provider. The mock ignores `root` because
+// tests check what the provider receives, not where it would have written.
+func (m *mockProvider) RestoreTo(root string, snap map[string][]byte) error {
+	if m.restoreErr != nil {
+		return m.restoreErr
+	}
 	m.restored = snap
 	return nil
 }
@@ -96,8 +115,16 @@ func (m *mockProvider) Restore(snap map[string][]byte) error {
 // snapshot field before calling Backup.
 var testMock = &mockProvider{name: "testprovider"}
 
+// alphaMock and betaMock are two additional mocks used by the multi-provider
+// isolation tests. They live alongside testMock in the global registry so the
+// "restore one provider only" path can be verified end-to-end.
+var alphaMock = &mockProvider{name: "alpha"}
+var betaMock = &mockProvider{name: "beta"}
+
 func TestMain(m *testing.M) {
 	provider.Register(testMock)
+	provider.Register(alphaMock)
+	provider.Register(betaMock)
 	m.Run()
 }
 
@@ -879,5 +906,160 @@ func TestBackup_EmptyProviderSnapshotProducesValidArchive(t *testing.T) {
 	}
 	if len(manifest) != 0 {
 		t.Errorf("expected empty manifest for empty snapshot, got %d entries", len(manifest))
+	}
+}
+
+// ----------------------------------------------------------------------------
+// Provider-isolation tests — verify that --providers selects only the listed
+// providers on restore and never touches the others' state. These cover the
+// concern: "if I restore --providers claude, my codex/gemini/copilot files on
+// disk must not be modified."
+// ----------------------------------------------------------------------------
+
+// resetMocks clears the per-provider mock state between sub-cases.
+func resetMocks() {
+	alphaMock.snapshot = nil
+	alphaMock.restored = nil
+	betaMock.snapshot = nil
+	betaMock.restored = nil
+}
+
+// TestRestore_ProvidersFlag_OnlyRestoresSelectedProvider verifies that
+// passing Providers: ["alpha"] on restore writes only alpha's files and
+// never invokes beta.RestoreTo, even though beta was part of the original
+// backup.
+func TestRestore_ProvidersFlag_OnlyRestoresSelectedProvider(t *testing.T) {
+	store := newStore(t)
+
+	// Seed two distinct providers with distinguishable content.
+	resetMocks()
+	alphaMock.snapshot = map[string][]byte{
+		"alpha-config.json": []byte(`{"provider":"alpha"}`),
+	}
+	betaMock.snapshot = map[string][]byte{
+		"beta-config.json": []byte(`{"provider":"beta"}`),
+	}
+
+	// Back up BOTH providers.
+	result, err := core.Backup(store, core.BackupOptions{
+		Providers: []string{"alpha", "beta"},
+	})
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+
+	// Sanity: the manifest must contain both providers' files.
+	if len(result.Files["alpha"]) != 1 || len(result.Files["beta"]) != 1 {
+		t.Fatalf("expected 1 file per provider in backup, got alpha=%d beta=%d",
+			len(result.Files["alpha"]), len(result.Files["beta"]))
+	}
+
+	// Reset what each provider received via RestoreTo so we can detect calls.
+	alphaMock.restored = nil
+	betaMock.restored = nil
+
+	// Restore ONLY alpha.
+	restoreResult, err := core.Restore(store, core.RestoreOptions{
+		BackupID:  result.ID,
+		Providers: []string{"alpha"},
+	})
+	if err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	// alpha must have received its file.
+	if alphaMock.restored == nil {
+		t.Fatal("alpha.RestoreTo was never called — selected provider was skipped")
+	}
+	if got := string(alphaMock.restored["alpha-config.json"]); got != `{"provider":"alpha"}` {
+		t.Errorf("alpha received wrong content: %q", got)
+	}
+
+	// beta must NOT have been touched at all. This is the core isolation
+	// guarantee: a partial restore must never invoke an unselected provider.
+	if betaMock.restored != nil {
+		t.Errorf("beta.RestoreTo was called during a restore --providers alpha; "+
+			"got: %v", betaMock.restored)
+	}
+
+	// Reported provider list reflects what was restored, not what was in the
+	// backup.
+	if len(restoreResult.Providers) != 1 || restoreResult.Providers[0] != "alpha" {
+		t.Errorf("restoreResult.Providers = %v, want [alpha]", restoreResult.Providers)
+	}
+	if restoreResult.Files != 1 {
+		t.Errorf("restoreResult.Files = %d, want 1", restoreResult.Files)
+	}
+}
+
+// TestRestore_ProvidersFlag_OutDirIsolation verifies the same isolation rule
+// for --out-dir mode: extracting only "alpha" must not extract beta's files.
+func TestRestore_ProvidersFlag_OutDirIsolation(t *testing.T) {
+	store := newStore(t)
+
+	resetMocks()
+	alphaMock.snapshot = map[string][]byte{"alpha-config.json": []byte("a")}
+	betaMock.snapshot = map[string][]byte{"beta-config.json": []byte("b")}
+
+	result, err := core.Backup(store, core.BackupOptions{
+		Providers: []string{"alpha", "beta"},
+	})
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+
+	alphaMock.restored = nil
+	betaMock.restored = nil
+
+	outDir := t.TempDir()
+	if _, err := core.Restore(store, core.RestoreOptions{
+		BackupID:  result.ID,
+		Providers: []string{"alpha"},
+		OutDir:    outDir,
+	}); err != nil {
+		t.Fatalf("Restore --out-dir: %v", err)
+	}
+
+	if alphaMock.restored == nil {
+		t.Fatal("alpha.RestoreTo not called in out-dir mode")
+	}
+	if betaMock.restored != nil {
+		t.Errorf("beta.RestoreTo was called in --out-dir mode; isolation broken")
+	}
+}
+
+// TestRestore_NoProvidersFlag_RestoresAllFromBackup verifies the inverse: when
+// the caller passes no Providers filter, every provider in the backup is
+// restored. Locks in the "empty filter = all" semantics so a future refactor
+// doesn't accidentally invert them.
+func TestRestore_NoProvidersFlag_RestoresAllFromBackup(t *testing.T) {
+	store := newStore(t)
+
+	resetMocks()
+	alphaMock.snapshot = map[string][]byte{"alpha-config.json": []byte("a")}
+	betaMock.snapshot = map[string][]byte{"beta-config.json": []byte("b")}
+
+	result, err := core.Backup(store, core.BackupOptions{
+		Providers: []string{"alpha", "beta"},
+	})
+	if err != nil {
+		t.Fatalf("Backup: %v", err)
+	}
+
+	alphaMock.restored = nil
+	betaMock.restored = nil
+
+	if _, err := core.Restore(store, core.RestoreOptions{
+		BackupID: result.ID,
+		// Providers intentionally omitted — should default to "all from backup".
+	}); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+
+	if alphaMock.restored == nil {
+		t.Error("alpha.RestoreTo not called when Providers filter was empty")
+	}
+	if betaMock.restored == nil {
+		t.Error("beta.RestoreTo not called when Providers filter was empty")
 	}
 }

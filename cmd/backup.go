@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	xterm "github.com/charmbracelet/x/term"
@@ -79,6 +80,10 @@ func runBackup(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	if err := ensureGitInitIfNeeded(); err != nil {
+		return err
+	}
+
 	store, err := storage.NewWithOptions(cfg.StorageMode, cfg.BackupDir, noPush, tokenEnv)
 	if err != nil {
 		return err
@@ -105,6 +110,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	opts := core.BackupOptions{
 		Providers:      providers,
 		ProjectPaths:   cfg.ProjectPaths,
+		Overrides:      buildProviderOverrides(),
 		Passphrase:     getPassphrase(cmd),
 		Labels:         labels,
 		Message:        message,
@@ -120,6 +126,8 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Backup complete: %s\n", result.ID)
 	fmt.Fprintf(cmd.OutOrStdout(), "Providers: %s\n", strings.Join(result.Providers, ", "))
 	fmt.Fprintf(cmd.OutOrStdout(), "Timestamp: %s\n", result.Timestamp.Format("2006-01-02 15:04:05 UTC"))
+
+	printBackupContents(cmd, result)
 
 	encrypted := opts.Passphrase != ""
 	isTTY := xterm.IsTerminal(os.Stdout.Fd())
@@ -158,5 +166,57 @@ func runBackup(cmd *cobra.Command, args []string) error {
 
 	incrementBackupCount()
 
+	// Auto-prune after a successful backup, when configured. Errors are
+	// downgraded to warnings inside runAutoPruneIfEnabled — the user's backup
+	// already succeeded and a prune failure should not flip the exit code.
+	runAutoPruneIfEnabled(cmd, cfg)
+
 	return nil
+}
+
+// printBackupContents lists the per-provider files included in the backup and
+// emits a loud warning when the archive is empty (silent-empty-backup footgun).
+func printBackupContents(cmd *cobra.Command, result *core.BackupResult) {
+	out := cmd.OutOrStdout()
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Files backed up:")
+
+	total := 0
+	provNames := make([]string, 0, len(result.Files))
+	for name := range result.Files {
+		provNames = append(provNames, name)
+	}
+	sort.Strings(provNames)
+
+	for _, name := range provNames {
+		paths := result.Files[name]
+		total += len(paths)
+		fmt.Fprintf(out, "  [%s] (%d %s)\n", name, len(paths), pluralFileCLI(len(paths)))
+		if !cfg.BackupShowFiles {
+			continue
+		}
+		if len(paths) == 0 {
+			fmt.Fprintln(out, "    (none)")
+			continue
+		}
+		for _, p := range paths {
+			fmt.Fprintf(out, "    %s\n", p)
+		}
+	}
+
+	if total == 0 {
+		fmt.Fprintln(cmd.ErrOrStderr())
+		fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: 0 files were backed up. Likely causes:")
+		fmt.Fprintln(cmd.ErrOrStderr(), "  - Provider directories are empty or absent (~/.claude, ~/.codex, ~/.gemini, ~/.copilot).")
+		fmt.Fprintln(cmd.ErrOrStderr(), "  - The files in those directories are not in amnesiai's allowlist.")
+		fmt.Fprintln(cmd.ErrOrStderr(), "    Add basenames you want backed up via [provider_overrides.<name>] extra_files in config.toml.")
+		fmt.Fprintln(cmd.ErrOrStderr(), "  - No per-project paths configured. Edit ~/.amnesiai/config.toml to add them.")
+	}
+}
+
+func pluralFileCLI(n int) string {
+	if n == 1 {
+		return "file"
+	}
+	return "files"
 }
