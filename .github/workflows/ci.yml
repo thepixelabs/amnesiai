@@ -58,9 +58,12 @@ jobs:
           cache: true
 
       - name: Run tests
-        # 20m timeout: scrypt-factor-20 + race-detector pushes encrypted
-        # round-trip tests past Go's default 10m on the macOS runner.
-        run: go test -race -timeout 20m -coverprofile=coverage.out ./...
+        # No -race on macOS: race-detector + scrypt-factor-20 is pathological
+        # on the GitHub macOS runner (a single TestEncryptDecryptRoundTrip
+        # exceeds 20min). Race detection is platform-agnostic for pure Go,
+        # so the ubuntu job above provides full race coverage; this job
+        # validates darwin build + test correctness only.
+        run: go test -timeout 10m -coverprofile=coverage.out ./...
 
   build:
     name: Build
