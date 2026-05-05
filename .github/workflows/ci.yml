@@ -42,7 +42,9 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test -race -coverprofile=coverage.out ./...
+        # 20m timeout: scrypt-factor-20 + race-detector pushes encrypted
+        # round-trip tests past Go's default 10m on the macOS runner.
+        run: go test -race -timeout 20m -coverprofile=coverage.out ./...
 
   test-macos:
     name: "Test (macos-latest)"
@@ -56,7 +58,9 @@ jobs:
           cache: true
 
       - name: Run tests
-        run: go test -race -coverprofile=coverage.out ./...
+        # 20m timeout: scrypt-factor-20 + race-detector pushes encrypted
+        # round-trip tests past Go's default 10m on the macOS runner.
+        run: go test -race -timeout 20m -coverprofile=coverage.out ./...
 
   build:
     name: Build
