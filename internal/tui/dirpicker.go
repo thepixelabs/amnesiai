@@ -19,8 +19,8 @@ type DirPickerModel struct {
 	defaultDir  string   // ctrl+r resets to this
 	suggestions []string // full absolute paths of matching dirs
 	cursor      int      // which suggestion is highlighted (-1 = none)
-	confirmed bool
-	cancelled bool
+	confirmed   bool
+	cancelled   bool
 }
 
 func (m DirPickerModel) Init() tea.Cmd { return nil }
