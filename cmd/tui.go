@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -186,9 +188,12 @@ func runSettingsFlow() error {
 			return err
 		}
 
-		if cfg.VerboseHelp != updatedCfg.VerboseHelp || cfg.BackupShowFiles != updatedCfg.BackupShowFiles {
+		if cfg.VerboseHelp != updatedCfg.VerboseHelp ||
+			cfg.BackupShowFiles != updatedCfg.BackupShowFiles ||
+			cfg.Retention.AutoPrune != updatedCfg.Retention.AutoPrune {
 			cfg.VerboseHelp = updatedCfg.VerboseHelp
 			cfg.BackupShowFiles = updatedCfg.BackupShowFiles
+			cfg.Retention.AutoPrune = updatedCfg.Retention.AutoPrune
 			if saveErr := config.Save(cfg); saveErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: could not save settings: %v\n", saveErr)
 			}
@@ -232,6 +237,167 @@ func runSettingsFlow() error {
 				tuiPause(r)
 			}
 
+		case internaltui.SettingsActionEditRetention:
+			editorResult, edErr := internaltui.RunRetentionEditor(cfg.Retention.KeepLast, cfg.Retention.MaxAgeDays)
+			if edErr != nil {
+				tuiPrintError(edErr)
+				continue
+			}
+			if !editorResult.Saved {
+				continue
+			}
+			cfg.Retention.KeepLast = editorResult.KeepLast
+			cfg.Retention.MaxAgeDays = editorResult.MaxAgeDays
+			if saveErr := config.Save(cfg); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not save retention settings: %v\n", saveErr)
+			} else {
+				fmt.Printf("%s keep_last=%d, max_age_days=%d\n",
+					tuiSuccessStyle.Render("  Retention saved:"),
+					cfg.Retention.KeepLast, cfg.Retention.MaxAgeDays)
+				r := bufio.NewReader(os.Stdin)
+				tuiPause(r)
+			}
+
+		case internaltui.SettingsActionPruneNow:
+			if cfg.Retention.KeepLast == 0 && cfg.Retention.MaxAgeDays == 0 {
+				fmt.Println(tuiWarnStyle.Render("  Retention is disabled (both keep_last and max_age_days are 0)."))
+				fmt.Println(tuiMutedStyle.Render("  Use the Retention setting above to configure limits first."))
+				r := bufio.NewReader(os.Stdin)
+				tuiPause(r)
+				continue
+			}
+			store, storeErr := getStorage()
+			if storeErr != nil {
+				tuiPrintError(storeErr)
+				continue
+			}
+			preview, previewErr := core.Prune(store, cfg.Retention, true)
+			if previewErr != nil {
+				tuiPrintError(fmt.Errorf("prune preview: %w", previewErr))
+				continue
+			}
+			if len(preview.Deleted) == 0 {
+				fmt.Println(tuiSuccessStyle.Render("  No backups outside the retention policy. Nothing to delete."))
+				r := bufio.NewReader(os.Stdin)
+				tuiPause(r)
+				continue
+			}
+			r := bufio.NewReader(os.Stdin)
+			fmt.Printf("  Would delete %d backup(s), keep %d.\n", len(preview.Deleted), len(preview.Kept))
+			for _, id := range preview.Deleted {
+				fmt.Println("    " + tuiMutedStyle.Render(id))
+			}
+			fmt.Println()
+			if !tuiConfirm("Delete these backups", false, r) {
+				continue
+			}
+			pruneResult, pruneErr := core.Prune(store, cfg.Retention, false)
+			if pruneErr != nil {
+				tuiPrintError(fmt.Errorf("prune: %w", pruneErr))
+				continue
+			}
+			fmt.Printf("%s %d backup(s) deleted.\n", tuiSuccessStyle.Render("  Pruned:"), len(pruneResult.Deleted))
+			tuiPause(r)
+
+		case internaltui.SettingsActionChangeBackupDir:
+			tuiPrintSubHeader("Backup location")
+			fmt.Printf("  Current: %s\n\n", tuiMutedStyle.Render(cfg.BackupDir))
+			newPath, promptErr := internaltui.RunDirPicker(cfg.BackupDir)
+			if errors.Is(promptErr, internaltui.ErrCancelled) {
+				continue
+			}
+			if promptErr != nil {
+				tuiPrintError(promptErr)
+				continue
+			}
+			// Expand a leading ~/ to the user's home directory.
+			if strings.HasPrefix(newPath, "~/") {
+				home, homeErr := os.UserHomeDir()
+				if homeErr != nil {
+					tuiPrintError(fmt.Errorf("cannot determine home directory: %w", homeErr))
+					continue
+				}
+				newPath = filepath.Join(home, newPath[2:])
+			}
+			// Reject clearly relative paths (but allow absolute paths with no tilde).
+			if !filepath.IsAbs(newPath) {
+				fmt.Println(tuiWarnStyle.Render("  Path must be absolute (start with / or ~/). Cancelled."))
+				r2 := bufio.NewReader(os.Stdin)
+				tuiPause(r2)
+				continue
+			}
+			// Check whether the directory already exists; offer to create it if not.
+			if _, statErr := os.Stat(newPath); os.IsNotExist(statErr) {
+				fmt.Printf("\n  %s does not exist.\n", tuiMutedStyle.Render(newPath))
+				r2 := bufio.NewReader(os.Stdin)
+				if !tuiConfirm("Create it", false, r2) {
+					continue
+				}
+				if mkErr := os.MkdirAll(newPath, 0700); mkErr != nil {
+					tuiPrintError(fmt.Errorf("create directory: %w", mkErr))
+					continue
+				}
+			}
+			oldDir := cfg.BackupDir
+			if oldDir != newPath {
+				// Only migrate when the directory actually exists and is non-empty.
+				entries, readErr := os.ReadDir(oldDir)
+				if readErr != nil && !os.IsNotExist(readErr) {
+					tuiPrintError(fmt.Errorf("read backup directory: %w", readErr))
+					r3 := bufio.NewReader(os.Stdin)
+					tuiPause(r3)
+					continue
+				}
+				if len(entries) > 0 {
+					fmt.Printf("\n%s\n", tuiMutedStyle.Render(fmt.Sprintf("  Moving backups from %s to %s...", oldDir, newPath)))
+					succeeded := 0
+					failed := 0
+					crossDevice := false
+					for _, entry := range entries {
+						src := filepath.Join(oldDir, entry.Name())
+						dst := filepath.Join(newPath, entry.Name())
+						renameErr := os.Rename(src, dst)
+						if renameErr == nil {
+							succeeded++
+							continue
+						}
+						// Cross-device: fall back to recursive copy for the whole dir.
+						if errors.Is(renameErr, syscall.EXDEV) {
+							crossDevice = true
+							break
+						}
+						fmt.Printf("%s\n", tuiWarnStyle.Render(fmt.Sprintf("  Warning: could not move %s: %v", entry.Name(), renameErr)))
+						failed++
+					}
+					if crossDevice {
+						fmt.Printf("%s\n", tuiMutedStyle.Render("  Cross-device move detected — copying files..."))
+						if copyErr := moveDir(oldDir, newPath); copyErr != nil {
+							tuiPrintError(fmt.Errorf("migrate backups: %w", copyErr))
+							r3 := bufio.NewReader(os.Stdin)
+							tuiPause(r3)
+							continue
+						}
+						fmt.Printf("%s\n", tuiSuccessStyle.Render(fmt.Sprintf("  ✓ Moved all items to %s", newPath)))
+					} else {
+						// Best-effort removal of the now-empty source dir.
+						_ = os.Remove(oldDir)
+						if failed == 0 {
+							fmt.Printf("%s\n", tuiSuccessStyle.Render(fmt.Sprintf("  ✓ Moved %d item(s) to %s", succeeded, newPath)))
+						} else {
+							fmt.Printf("%s\n", tuiWarnStyle.Render(fmt.Sprintf("  Moved %d item(s); %d item(s) could not be moved — check above for details", succeeded, failed)))
+						}
+					}
+				}
+			}
+			cfg.BackupDir = newPath
+			if saveErr := config.Save(cfg); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not save backup location: %v\n", saveErr)
+			} else {
+				fmt.Println(tuiSuccessStyle.Render("  Backup location updated: ") + newPath)
+			}
+			r3 := bufio.NewReader(os.Stdin)
+			tuiPause(r3)
+
 		case internaltui.SettingsActionBack, internaltui.SettingsActionNone:
 			return nil
 		}
@@ -248,6 +414,51 @@ func hasTTY() bool {
 }
 
 var isTTYFn = hasTTY
+
+// moveDir recursively copies all contents of src into dst, then removes src.
+// It is used as a cross-device fallback when os.Rename fails with EXDEV.
+// Directories are created with 0700; files are created with 0600.
+func moveDir(src, dst string) error {
+	walkErr := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0700)
+		}
+		return copyFile(path, target)
+	})
+	if walkErr != nil {
+		return walkErr
+	}
+	return os.RemoveAll(src)
+}
+
+// copyFile copies a single regular file from src to dst, creating dst if it
+// does not exist. Permissions on the destination are always 0600.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
 
 // ─── Legacy readline sub-flows ────────────────────────────────────────────────
 
@@ -424,7 +635,7 @@ func (ui *legacyUI) restoreFlow() error {
 		return tuiHandleInputErr(err)
 	}
 
-	providers, err := tuiPickProviders(entry.Providers)
+	providers, err := tuiPickProvidersFrom(filterProviders(entry.Providers, providerregistry.Names()), entry.Providers)
 	if err != nil {
 		return tuiHandleInputErr(err)
 	}
@@ -480,6 +691,13 @@ func (ui *legacyUI) restoreFlow() error {
 		fmt.Println(tuiMutedStyle.Render("(no real destinations were touched)"))
 	default:
 		fmt.Printf("%s Restored %d file(s) from %s\n", tuiSuccessStyle.Render("Applied:"), result.Files, result.BackupID)
+		if len(result.RestoredPaths) > 0 {
+			fmt.Println()
+			fmt.Println(tuiAccentStyle.Render("Files restored"))
+			for _, p := range result.RestoredPaths {
+				fmt.Println("  " + tuiMutedStyle.Render(p))
+			}
+		}
 	}
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Providers:"), strings.Join(result.Providers, ", "))
 
@@ -547,7 +765,7 @@ func (ui *legacyUI) diffFlow() error {
 		return tuiHandleInputErr(err)
 	}
 
-	providers, err := tuiPickProviders(entry.Providers)
+	providers, err := tuiPickProvidersFrom(filterProviders(entry.Providers, providerregistry.Names()), entry.Providers)
 	if err != nil {
 		return tuiHandleInputErr(err)
 	}
@@ -651,7 +869,12 @@ func (ui *legacyUI) listFlow() error {
 // ─── Provider picker (Bubbletea sub-program) ──────────────────────────────────
 
 func tuiPickProviders(defaults []string) ([]string, error) {
-	available := providerregistry.Names()
+	return tuiPickProvidersFrom(providerregistry.Names(), defaults)
+}
+
+// tuiPickProvidersFrom runs the provider picker with an explicit available set.
+// Used by restore/diff flows to restrict choices to what the backup actually contains.
+func tuiPickProvidersFrom(available, defaults []string) ([]string, error) {
 	if len(available) == 0 {
 		return nil, fmt.Errorf("no providers are registered")
 	}
