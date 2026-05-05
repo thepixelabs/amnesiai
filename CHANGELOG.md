@@ -1,3 +1,9 @@
+## [0.2.0](https://github.com/thepixelabs/amnesiai/compare/v0.1.0...v0.2.0) (2026-05-05)
+
+### Features
+
+* restore safety, retention, provider overhaul, TUI polish ([4149438](https://github.com/thepixelabs/amnesiai/commit/4149438697ed526a25b2d335dd3e83333e5909b7))
+
 ## [0.1.0](https://github.com/thepixelabs/amnesiai/compare/v0.0.0...v0.1.0) (2026-05-03)
 
 ### Features
