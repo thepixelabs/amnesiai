@@ -38,7 +38,7 @@ type ListResult struct {
 type ListModel struct {
 	entries     []storage.BackupEntry
 	cursor      int
-	confirming  bool      // true while showing delete confirmation
+	confirming  bool // true while showing delete confirmation
 	result      ListResult
 	infoMessage string // transient line shown after a non-fatal action
 }

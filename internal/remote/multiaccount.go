@@ -169,4 +169,3 @@ func scoped(env []string, tool, account string) []string {
 	}
 	return filtered
 }
-

@@ -35,9 +35,9 @@ import (
 // defaultTopLevelFiles is the set of file basenames directly under ~/.codex/
 // that are in scope. User overrides extend or shrink this set.
 var defaultTopLevelFiles = map[string]bool{
-	"config.toml":      true,
-	"AGENTS.md":        true,
-	"instructions.md":  true,
+	"config.toml":     true,
+	"AGENTS.md":       true,
+	"instructions.md": true,
 }
 
 // allowedTopLevelDirs is the set of directory names directly under ~/.codex/

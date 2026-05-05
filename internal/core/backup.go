@@ -308,7 +308,7 @@ func ExtractArchive(payload []byte) (map[string][]byte, []ManifestEntry, error) 
 	if err != nil {
 		return nil, nil, fmt.Errorf("open gzip: %w", err)
 	}
-	defer gr.Close()
+	defer func() { _ = gr.Close() }()
 
 	tr := tar.NewReader(gr)
 	files := make(map[string][]byte)

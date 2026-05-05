@@ -187,6 +187,9 @@ func InitGitRemote(opts InitGitRemoteOptions) (repoURL string, err error) {
 		var sel remote.AccountSelection
 		if repoURL != "" {
 			sel, err = remote.ResolveAccount(repoURL)
+			if err != nil {
+				return "", fmt.Errorf("resolve account for %s: %w", repoURL, err)
+			}
 		} else {
 			// Default to GitHub when no URL is provided.
 			accounts, ghErr := remote.GHAuthList()

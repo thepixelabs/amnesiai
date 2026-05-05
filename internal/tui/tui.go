@@ -35,8 +35,8 @@ const (
 
 // Exported styles so cmd/tui.go can reuse them without duplicating constants.
 var (
-	AccentStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorCyan))
-	IndigoStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorIndigo))
+	AccentStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorCyan))
+	IndigoStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorIndigo))
 	SuccessStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorGreen))
 	WarnStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorAmber))
 	ErrorStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(ColorRed))

@@ -349,10 +349,10 @@ func TestCodexRestore_RejectsNonAllowlistedPaths(t *testing.T) {
 
 	snapshot := map[string][]byte{
 		filepath.Join("agents", "ok.toml"):       []byte(`[agent]`),
-		filepath.Join("rules", "default.rules"):   []byte("# ok"),
-		filepath.Join("rules", "custom.rules"):    []byte("# should be skipped"),
-		"credentials.json":                        []byte(`{"key":"val"}`),
-		filepath.Join("other_dir", "state.json"):  []byte(`{}`),
+		filepath.Join("rules", "default.rules"):  []byte("# ok"),
+		filepath.Join("rules", "custom.rules"):   []byte("# should be skipped"),
+		"credentials.json":                       []byte(`{"key":"val"}`),
+		filepath.Join("other_dir", "state.json"): []byte(`{}`),
 	}
 
 	if err := p.Restore(snapshot); err != nil {

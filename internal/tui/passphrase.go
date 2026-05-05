@@ -17,10 +17,6 @@ import (
 	xterm "github.com/charmbracelet/x/term"
 )
 
-// maskRune is the character shown in lieu of each typed byte.
-// U+00B7 MIDDLE DOT — matches the provider-picker selection marker.
-const maskRune = '·'
-
 // ReadPassphrase prompts the user for a passphrase on /dev/tty (or os.Stdin
 // when /dev/tty is unavailable).
 //
@@ -35,7 +31,7 @@ func ReadPassphrase(label string, verify bool) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("open tty: %w", err)
 	}
-	defer fd.Close()
+	defer func() { _ = fd.Close() }()
 
 	first, err := readMasked(fd, label)
 	if err != nil {
@@ -84,7 +80,9 @@ func readMasked(tty *os.File, label string) ([]byte, error) {
 func openTTY() (*os.File, error) {
 	f, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
 	if err != nil {
-		return os.Stdin, nil //nolint:nilerr — intentional fallback
+		// Intentional fallback: when /dev/tty is unavailable (tests, containers,
+		// CI), use os.Stdin instead of surfacing the open error.
+		return os.Stdin, nil
 	}
 	return f, nil
 }

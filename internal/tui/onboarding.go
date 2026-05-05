@@ -61,14 +61,14 @@ type WizardResult struct {
 type wizardStep int
 
 const (
-	stepWelcome       wizardStep = iota // static info screen
-	stepStorageMode                     // pick local / git-local / git-remote
-	stepGRHost                          // pick github / gitlab (git-remote only)
-	stepGRAccount                       // pick authenticated account (git-remote only)
-	stepGRRepoChoice                    // use existing URL or create new repo
-	stepGRRepoInput                     // text input: URL or repo name
-	stepPassphraseNote                  // advisory — no choice needed
-	stepDone                            // sentinel
+	stepWelcome        wizardStep = iota // static info screen
+	stepStorageMode                      // pick local / git-local / git-remote
+	stepGRHost                           // pick github / gitlab (git-remote only)
+	stepGRAccount                        // pick authenticated account (git-remote only)
+	stepGRRepoChoice                     // use existing URL or create new repo
+	stepGRRepoInput                      // text input: URL or repo name
+	stepPassphraseNote                   // advisory — no choice needed
+	stepDone                             // sentinel
 )
 
 // ─── Async account-discovery messages ────────────────────────────────────────
@@ -104,7 +104,7 @@ func discoverAccountsCmd(host string) tea.Cmd {
 type OnboardingModel struct {
 	step    wizardStep
 	result  WizardResult
-	cursor  int    // index into the current choice list
+	cursor  int // index into the current choice list
 	width   int
 	aborted bool
 

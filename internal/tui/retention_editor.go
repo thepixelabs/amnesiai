@@ -24,10 +24,10 @@ type RetentionEditorResult struct {
 // RetentionEditorModel is a tiny two-field form. Field 0 = KeepLast,
 // field 1 = MaxAgeDays. Tab cycles fields; Enter saves; Esc/q cancels.
 type RetentionEditorModel struct {
-	fields  [2]string // text buffers for each field
-	cursor  int       // 0 or 1
-	result  RetentionEditorResult
-	errMsg  string
+	fields [2]string // text buffers for each field
+	cursor int       // 0 or 1
+	result RetentionEditorResult
+	errMsg string
 }
 
 // NewRetentionEditorModel seeds the editor with the current policy values.

@@ -250,10 +250,10 @@ func FormatRemoteBindings(st *config.State) string {
 	}
 
 	for url, b := range st.RemoteBindings {
-		sb.WriteString(fmt.Sprintf("  %s\n", wAccent.Render(url)))
-		sb.WriteString(fmt.Sprintf("    host:    %s\n", wNormal.Render(b.Host)))
-		sb.WriteString(fmt.Sprintf("    account: %s\n", wNormal.Render(b.Account)))
-		sb.WriteString(fmt.Sprintf("    bound:   %s\n", wMuted.Render(b.LastBoundAt.Format("2006-01-02 15:04:05 UTC"))))
+		fmt.Fprintf(&sb, "  %s\n", wAccent.Render(url))
+		fmt.Fprintf(&sb, "    host:    %s\n", wNormal.Render(b.Host))
+		fmt.Fprintf(&sb, "    account: %s\n", wNormal.Render(b.Account))
+		fmt.Fprintf(&sb, "    bound:   %s\n", wMuted.Render(b.LastBoundAt.Format("2006-01-02 15:04:05 UTC")))
 		sb.WriteString("\n")
 	}
 	return sb.String()
