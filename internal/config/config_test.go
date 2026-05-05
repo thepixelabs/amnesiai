@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -188,6 +189,26 @@ func TestValidate_AllFourProvidersValid(t *testing.T) {
 	}
 	if err := config.Validate(cfg); err != nil {
 		t.Errorf("expected no error for all four providers, got: %v", err)
+	}
+}
+
+// TestDefaultBackupDir_ReturnsAbsolutePathContainingAmnesiai verifies that
+// DefaultBackupDir returns a non-empty absolute path that contains "amnesiai".
+// The function must work even when the home directory lookup succeeds (which it
+// does in any normal test environment).
+func TestDefaultBackupDir_ReturnsAbsolutePathContainingAmnesiai(t *testing.T) {
+	got := config.DefaultBackupDir()
+
+	if got == "" {
+		t.Fatal("DefaultBackupDir returned an empty string")
+	}
+
+	if !filepath.IsAbs(got) {
+		t.Errorf("DefaultBackupDir returned a non-absolute path: %q", got)
+	}
+
+	if !strings.Contains(got, "amnesiai") {
+		t.Errorf("DefaultBackupDir path %q does not contain %q", got, "amnesiai")
 	}
 }
 
