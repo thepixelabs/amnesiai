@@ -1,11 +1,4 @@
-// Package cmd — TUI entry point for amnesiai.
-//
-// Visual style (ocean palette, greeting cadence) was adapted from an internal Python tool:
-//   - Pre-rendered thin figlet ASCII-art banner with a left-to-right ocean gradient.
-//   - Time-of-day greeting keyed to hour windows.
-//   - Arrow-key navigation (↑↓) through menu items with single-letter hotkeys.
-//   - Middle-dot (·, U+00B7) as selection marker in provider picker and passphrase mask.
-//   - Unicode box-drawing borders (╭ ╮ ╰ ╯ ─ │).
+// Package cmd implements the TUI entry point for amnesiai.
 package cmd
 
 import (
@@ -14,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -82,7 +76,7 @@ func tuiLoop(cmd *cobra.Command) error {
 	}
 
 	for {
-		model := internaltui.NewMenuModel(version.Version)
+		model := internaltui.NewMenuModel(version.Version, cfg.VerboseHelp)
 		p := tea.NewProgram(model, tea.WithAltScreen())
 		finalModel, err := p.Run()
 		if err != nil {
@@ -105,8 +99,6 @@ func tuiLoop(cmd *cobra.Command) error {
 			_ = ui.diffFlow()
 		case internaltui.ActionList:
 			_ = ui.listFlow()
-		case internaltui.ActionCompletion:
-			ui.completionHelp()
 		case internaltui.ActionSettings:
 			if err := runSettingsFlow(); err != nil {
 				tuiPrintError(err)
@@ -142,11 +134,17 @@ func runOnboardingFlow() error {
 	}
 
 	cfg.StorageMode = result.StorageMode
-	cfg.Telemetry = result.Telemetry
 	cfg.FirstRun = false
 
-	// When git-remote was chosen, initialise the remote before persisting.
-	if result.StorageMode == "git-remote" {
+	switch result.StorageMode {
+	case "git-local":
+		if initErr := storage.InitGitLocal(cfg.BackupDir); initErr != nil {
+			fmt.Fprintf(os.Stderr, "warning: git-local setup failed: %v\n", initErr)
+			fmt.Fprintf(os.Stderr, "         Falling back to local; run `amnesiai init --mode git-local` later.\n")
+			cfg.StorageMode = "local"
+		}
+
+	case "git-remote":
 		url, initErr := storage.InitGitRemote(storage.InitGitRemoteOptions{
 			Dir:        cfg.BackupDir,
 			RepoURL:    result.RemoteURL,
@@ -157,6 +155,10 @@ func runOnboardingFlow() error {
 			fmt.Fprintf(os.Stderr, "warning: git-remote setup failed: %v\n", initErr)
 			fmt.Fprintf(os.Stderr, "         Falling back to git-local; run `amnesiai init --mode git-remote` later.\n")
 			cfg.StorageMode = "git-local"
+			if localErr := storage.InitGitLocal(cfg.BackupDir); localErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: git-local fallback also failed: %v\n", localErr)
+				cfg.StorageMode = "local"
+			}
 		} else {
 			cfg.GitRemote.URL = url
 		}
@@ -184,9 +186,9 @@ func runSettingsFlow() error {
 			return err
 		}
 
-		if cfg.VerboseHelp != updatedCfg.VerboseHelp || cfg.Telemetry != updatedCfg.Telemetry {
+		if cfg.VerboseHelp != updatedCfg.VerboseHelp || cfg.BackupShowFiles != updatedCfg.BackupShowFiles {
 			cfg.VerboseHelp = updatedCfg.VerboseHelp
-			cfg.Telemetry = updatedCfg.Telemetry
+			cfg.BackupShowFiles = updatedCfg.BackupShowFiles
 			if saveErr := config.Save(cfg); saveErr != nil {
 				fmt.Fprintf(os.Stderr, "warning: could not save settings: %v\n", saveErr)
 			}
@@ -211,6 +213,24 @@ func runSettingsFlow() error {
 			fmt.Print(internaltui.FormatRemoteBindings(st))
 			r := bufio.NewReader(os.Stdin)
 			tuiPause(r)
+
+		case internaltui.SettingsActionPickProviders:
+			tuiPrintSubHeader("Default providers")
+			selected, pickErr := tuiPickProviders(cfg.Providers)
+			if pickErr != nil {
+				if !errors.Is(pickErr, internaltui.ErrCancelled) {
+					tuiPrintError(pickErr)
+				}
+				continue
+			}
+			cfg.Providers = selected
+			if saveErr := config.Save(cfg); saveErr != nil {
+				fmt.Fprintf(os.Stderr, "warning: could not save default providers: %v\n", saveErr)
+			} else {
+				fmt.Println(tuiSuccessStyle.Render("  Default providers updated: ") + strings.Join(selected, ", "))
+				r := bufio.NewReader(os.Stdin)
+				tuiPause(r)
+			}
 
 		case internaltui.SettingsActionBack, internaltui.SettingsActionNone:
 			return nil
@@ -252,7 +272,7 @@ func (ui *legacyUI) backupFlow() error {
 		return tuiHandleInputErr(err)
 	}
 
-	labels, err := internaltui.PromptLabels()
+	labels, err := tuiPromptLabelsWithSuggestions()
 	if err != nil {
 		tuiPrintError(err)
 		return nil
@@ -297,10 +317,12 @@ func (ui *legacyUI) backupFlow() error {
 	}
 
 	opts := core.BackupOptions{
-		Providers:  providers,
-		Passphrase: passphrase,
-		Labels:     labels,
-		Message:    message,
+		Providers:    providers,
+		ProjectPaths: cfg.ProjectPaths,
+		Overrides:    buildProviderOverrides(),
+		Passphrase:   passphrase,
+		Labels:       labels,
+		Message:      message,
 	}
 
 	var result *core.BackupResult
@@ -314,12 +336,15 @@ func (ui *legacyUI) backupFlow() error {
 	}
 
 	incrementBackupCount()
+	runAutoPruneIfEnabled(ui.cmd, cfg)
 
 	tuiClearScreen()
 	tuiPrintSubHeader("Backup complete")
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("ID:"), result.ID)
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Providers:"), strings.Join(result.Providers, ", "))
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Timestamp:"), result.Timestamp.Format("2006-01-02 15:04:05 UTC"))
+
+	tuiPrintBackupContents(result)
 
 	// Enriched findings display.
 	encrypted := passphrase != ""
@@ -328,6 +353,59 @@ func (ui *legacyUI) backupFlow() error {
 
 	tuiPause(ui.reader())
 	return nil
+}
+
+// tuiPrintBackupContents renders the per-provider file list captured in the
+// BackupResult plus a loud warning when zero files were archived (the silent
+// "empty backup" footgun: providers had nothing to back up because their dirs
+// are empty and no project_paths are configured).
+func tuiPrintBackupContents(result *core.BackupResult) {
+	fmt.Println()
+	fmt.Println(tuiAccentStyle.Render("Files backed up"))
+
+	total := 0
+	provNames := make([]string, 0, len(result.Files))
+	for name := range result.Files {
+		provNames = append(provNames, name)
+	}
+	sort.Strings(provNames)
+
+	for _, name := range provNames {
+		paths := result.Files[name]
+		total += len(paths)
+		fmt.Printf("  %s %s %s\n",
+			tuiAccentStyle.Render("["+name+"]"),
+			tuiMutedStyle.Render(fmt.Sprintf("(%d %s)", len(paths), pluralFile(len(paths)))),
+			"",
+		)
+		if !cfg.BackupShowFiles {
+			continue
+		}
+		if len(paths) == 0 {
+			fmt.Println("    " + tuiMutedStyle.Render("(none)"))
+			continue
+		}
+		for _, p := range paths {
+			fmt.Println("    " + tuiMutedStyle.Render(p))
+		}
+	}
+
+	if total == 0 {
+		fmt.Println()
+		fmt.Println(tuiWarnStyle.Render("WARNING: 0 files were backed up."))
+		fmt.Println(tuiMutedStyle.Render("  Likely causes:"))
+		fmt.Println(tuiMutedStyle.Render("  - Provider directories are empty or absent (~/.claude, ~/.codex, ~/.gemini, ~/.copilot)."))
+		fmt.Println(tuiMutedStyle.Render("  - The files in those directories are not in amnesiai's allowlist."))
+		fmt.Println(tuiMutedStyle.Render("    Add basenames via [provider_overrides.<name>] extra_files in config.toml."))
+		fmt.Println(tuiMutedStyle.Render("  - No per-project paths configured. Edit ~/.amnesiai/config.toml to add them."))
+	}
+}
+
+func pluralFile(n int) string {
+	if n == 1 {
+		return "file"
+	}
+	return "files"
 }
 
 func (ui *legacyUI) restoreFlow() error {
@@ -351,8 +429,11 @@ func (ui *legacyUI) restoreFlow() error {
 		return tuiHandleInputErr(err)
 	}
 
-	dryRun := tuiConfirm("Dry run", false, ui.reader())
-	if !dryRun && !tuiConfirm("Restore files to disk", false, ui.reader()) {
+	mode, outDir, err := tuiPickRestoreMode(ui.reader())
+	if err != nil {
+		return tuiHandleInputErr(err)
+	}
+	if mode == restoreModeCancel {
 		return nil
 	}
 
@@ -368,15 +449,20 @@ func (ui *legacyUI) restoreFlow() error {
 		}
 	}
 
+	opts := core.RestoreOptions{
+		BackupID:     entry.ID,
+		Providers:    providers,
+		ProjectPaths: cfg.ProjectPaths,
+		Overrides:    buildProviderOverrides(),
+		Passphrase:   passphrase,
+		DryRun:       mode == restoreModeDryRun,
+		OutDir:       outDir,
+	}
+
 	var result *core.RestoreResult
 	if spinErr := tuiWithSpinner("Restoring backup", func() error {
 		var opErr error
-		result, opErr = core.Restore(store, core.RestoreOptions{
-			BackupID:   entry.ID,
-			Providers:  providers,
-			Passphrase: passphrase,
-			DryRun:     dryRun,
-		})
+		result, opErr = core.Restore(store, opts)
 		return opErr
 	}); spinErr != nil {
 		tuiPrintError(fmt.Errorf("restore failed: %w", spinErr))
@@ -385,14 +471,64 @@ func (ui *legacyUI) restoreFlow() error {
 
 	tuiClearScreen()
 	tuiPrintSubHeader("Restore result")
-	if result.DryRun {
+	switch {
+	case result.DryRun:
 		fmt.Printf("%s Would restore %d file(s) from %s\n", tuiSuccessStyle.Render("Dry run:"), result.Files, result.BackupID)
-	} else {
+	case result.OutDir != "":
+		fmt.Printf("%s Extracted %d file(s) from %s into %s\n",
+			tuiSuccessStyle.Render("Inspect:"), result.Files, result.BackupID, result.OutDir)
+		fmt.Println(tuiMutedStyle.Render("(no real destinations were touched)"))
+	default:
 		fmt.Printf("%s Restored %d file(s) from %s\n", tuiSuccessStyle.Render("Applied:"), result.Files, result.BackupID)
 	}
 	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Providers:"), strings.Join(result.Providers, ", "))
+
 	tuiPause(ui.reader())
 	return nil
+}
+
+type restoreMode int
+
+const (
+	restoreModeCancel restoreMode = iota
+	restoreModeLive
+	restoreModeDryRun
+	restoreModeOutDir
+)
+
+// tuiPickRestoreMode prompts the user to choose between live restore, dry run,
+// or extract-to-directory inspection.
+func tuiPickRestoreMode(r *bufio.Reader) (restoreMode, string, error) {
+	fmt.Println()
+	fmt.Println(tuiAccentStyle.Render("Restore mode"))
+	fmt.Println("  [1] Restore to disk")
+	fmt.Println("  [2] Dry run")
+	fmt.Println("  [3] Inspect (extract to directory)")
+	choice, err := tuiPrompt("Choose [1/2/3]", r)
+	if err != nil {
+		return restoreModeCancel, "", err
+	}
+	switch strings.TrimSpace(choice) {
+	case "1", "":
+		if !tuiConfirm("Restore files to disk", false, r) {
+			return restoreModeCancel, "", nil
+		}
+		return restoreModeLive, "", nil
+	case "2":
+		return restoreModeDryRun, "", nil
+	case "3":
+		dir, perr := tuiPrompt("Output directory", r)
+		if perr != nil {
+			return restoreModeCancel, "", perr
+		}
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			return restoreModeCancel, "", fmt.Errorf("output directory cannot be empty")
+		}
+		return restoreModeOutDir, dir, nil
+	default:
+		return restoreModeCancel, "", fmt.Errorf("unknown choice %q", choice)
+	}
 }
 
 func (ui *legacyUI) diffFlow() error {
@@ -432,9 +568,11 @@ func (ui *legacyUI) diffFlow() error {
 	if spinErr := tuiWithSpinner("Calculating diff", func() error {
 		var opErr error
 		result, opErr = core.Diff(store, core.DiffOptions{
-			BackupID:   entry.ID,
-			Providers:  providers,
-			Passphrase: passphrase,
+			BackupID:     entry.ID,
+			Providers:    providers,
+			ProjectPaths: cfg.ProjectPaths,
+			Overrides:    buildProviderOverrides(),
+			Passphrase:   passphrase,
 		})
 		return opErr
 	}); spinErr != nil {
@@ -479,32 +617,35 @@ func (ui *legacyUI) diffFlow() error {
 }
 
 func (ui *legacyUI) listFlow() error {
-	_, entries, err := tuiLoadEntries()
-	if err != nil {
-		tuiPrintError(err)
-		return nil
+	// Loop so a deletion refreshes the list without bouncing back to the main menu.
+	for {
+		store, entries, err := tuiLoadEntries()
+		if err != nil {
+			tuiPrintError(err)
+			return nil
+		}
+
+		result, runErr := internaltui.RunListView(entries)
+		if runErr != nil {
+			tuiPrintError(runErr)
+			return nil
+		}
+
+		switch result.Action {
+		case internaltui.ListActionDeleteRequest:
+			if delErr := store.Delete(result.TargetID); delErr != nil {
+				tuiPrintError(fmt.Errorf("delete %s: %w", result.TargetID, delErr))
+				return nil
+			}
+			tuiClearScreen()
+			fmt.Println(tuiSuccessStyle.Render("Deleted backup ") + result.TargetID)
+			// Loop and re-render the list with the deletion applied.
+			continue
+
+		case internaltui.ListActionQuit:
+			return nil
+		}
 	}
-
-	tuiClearScreen()
-	tuiPrintSubHeader("Backups")
-	tuiPrintBackupTable(entries)
-	tuiPause(ui.reader())
-	return nil
-}
-
-func (ui *legacyUI) completionHelp() {
-	tuiClearScreen()
-	tuiPrintSubHeader("Completion")
-	fmt.Println("This is a command, not a flag. It prints a shell completion script.")
-	fmt.Println()
-	fmt.Println(tuiAccentStyle.Render("Examples"))
-	fmt.Println("  bash:  amnesiai completion bash > ~/.local/share/bash-completion/completions/amnesiai")
-	fmt.Println("  zsh:   amnesiai completion zsh > ~/.zfunc/_amnesiai")
-	fmt.Println("  fish:  amnesiai completion fish > ~/.config/fish/completions/amnesiai.fish")
-	fmt.Println("  pwsh:  amnesiai completion powershell > amnesiai.ps1")
-	fmt.Println()
-	fmt.Println(tuiMutedStyle.Render("After writing the script, reload your shell config to enable tab completion."))
-	tuiPause(ui.reader())
 }
 
 // ─── Provider picker (Bubbletea sub-program) ──────────────────────────────────
@@ -530,6 +671,10 @@ func tuiPickProviders(defaults []string) ([]string, error) {
 	picker, ok := finalModel.(internaltui.ProviderPickerModel)
 	if !ok {
 		return nil, fmt.Errorf("provider picker: unexpected model type")
+	}
+
+	if picker.Cancelled() {
+		return nil, internaltui.ErrCancelled
 	}
 
 	sel := picker.SelectedProviders()
@@ -609,17 +754,24 @@ func tuiHandleInputErr(err error) error {
 		fmt.Println()
 		return io.EOF
 	}
+	if errors.Is(err, internaltui.ErrCancelled) {
+		return nil
+	}
 	tuiPrintError(err)
 	return nil
 }
 
 func tuiChooseBackup(entries []storage.BackupEntry, r *bufio.Reader) (storage.BackupEntry, error) {
-	input, err := tuiPrompt("Backup (Enter=latest, number or exact ID)", r)
+	input, err := tuiPrompt("Backup (Enter=latest, number, exact ID, or q to cancel)", r)
 	if err != nil {
 		return storage.BackupEntry{}, err
 	}
 	if input == "" {
 		return entries[0], nil
+	}
+	switch strings.ToLower(input) {
+	case "q", "quit", "back", "esc":
+		return storage.BackupEntry{}, internaltui.ErrCancelled
 	}
 
 	if idx, err := strconv.Atoi(input); err == nil {
@@ -666,8 +818,38 @@ func tuiPrintBackupTable(entries []storage.BackupEntry) {
 			entry.Timestamp.Format("2006-01-02 15:04:05"),
 			strings.Join(entry.Providers, ", "),
 		)
+		if meta := formatBackupMeta(entry); meta != "" {
+			fmt.Println("      " + tuiMutedStyle.Render(meta))
+		}
 	}
 	fmt.Println()
+}
+
+// formatBackupMeta renders the labels and/or message line shown under each
+// backup row.  Returns "" when both are empty so the table stays compact.
+func formatBackupMeta(entry storage.BackupEntry) string {
+	var parts []string
+	if len(entry.Labels) > 0 {
+		keys := make([]string, 0, len(entry.Labels))
+		for k := range entry.Labels {
+			if strings.HasPrefix(k, "_") {
+				continue // internal labels (e.g. _filecount_*)
+			}
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		pairs := make([]string, 0, len(keys))
+		for _, k := range keys {
+			pairs = append(pairs, k+"="+entry.Labels[k])
+		}
+		if len(pairs) > 0 {
+			parts = append(parts, strings.Join(pairs, ", "))
+		}
+	}
+	if entry.Message != "" {
+		parts = append(parts, `"`+entry.Message+`"`)
+	}
+	return strings.Join(parts, " · ")
 }
 
 func tuiWithSpinner(label string, fn func() error) error {
@@ -751,6 +933,82 @@ func resolveProviders(input string, defaults []string, available []string) ([]st
 
 func parseLabels(input string) (map[string]string, error) {
 	return internaltui.ParseLabels(input)
+}
+
+// tuiPromptLabelsWithSuggestions shows a multi-select picker of recent labels
+// (gathered from prior backups) and then a free-form prompt for additional new
+// labels.  Returns the merged map.  When no recent labels exist it falls
+// straight through to the free-form prompt — no empty picker is shown.
+//
+// q / esc on the picker means "skip suggestions, just type new ones" — not
+// "abort the whole label step" — since it's reasonable to want fresh labels
+// without sifting through history.
+func tuiPromptLabelsWithSuggestions() (map[string]string, error) {
+	recent := recentLabelStrings(20)
+
+	picked := map[string]string{}
+	if len(recent) > 0 {
+		model := internaltui.NewLabelPickerModel(recent)
+		p := tea.NewProgram(model)
+		final, err := p.Run()
+		if err != nil {
+			return nil, fmt.Errorf("label picker: %w", err)
+		}
+		if pm, ok := final.(internaltui.LabelPickerModel); ok && !pm.Cancelled() {
+			for _, kv := range pm.SelectedLabels() {
+				parts := strings.SplitN(kv, "=", 2)
+				if len(parts) == 2 {
+					picked[parts[0]] = parts[1]
+				}
+			}
+		}
+	}
+
+	typed, err := internaltui.PromptLabels()
+	if err != nil {
+		return nil, err
+	}
+
+	// Typed labels win on key collision — the user just typed them.
+	for k, v := range typed {
+		picked[k] = v
+	}
+	return picked, nil
+}
+
+// recentLabelStrings walks the existing backups newest-first and returns up to
+// max distinct "key=value" strings.  Newest backup's labels appear first; later
+// duplicates are skipped.  Storage errors are swallowed — label suggestions are
+// purely a convenience and must never block a backup.
+func recentLabelStrings(max int) []string {
+	store, err := getStorage()
+	if err != nil {
+		return nil
+	}
+	entries, err := store.List()
+	if err != nil {
+		return nil
+	}
+
+	seen := map[string]bool{}
+	out := make([]string, 0, max)
+	for _, e := range entries {
+		for k, v := range e.Labels {
+			if strings.HasPrefix(k, "_") {
+				continue // internal labels (e.g. _filecount_*)
+			}
+			kv := k + "=" + v
+			if seen[kv] {
+				continue
+			}
+			seen[kv] = true
+			out = append(out, kv)
+			if len(out) >= max {
+				return out
+			}
+		}
+	}
+	return out
 }
 
 func splitCSVLocal(input string) []string {

@@ -30,9 +30,9 @@ type RemoteBinding struct {
 
 // State is the app-owned runtime state persisted to ~/.amnesiai/state.json.
 type State struct {
-	SchemaVersion            int                      `json:"schema_version"`
-	RemoteBindings           map[string]RemoteBinding `json:"remote_bindings"`
-	OnboardingLastSeenVersion string                  `json:"onboarding_last_seen_version"`
+	SchemaVersion             int                      `json:"schema_version"`
+	RemoteBindings            map[string]RemoteBinding `json:"remote_bindings"`
+	OnboardingLastSeenVersion string                   `json:"onboarding_last_seen_version"`
 }
 
 // defaultState returns a zero-value State with the current schema version.

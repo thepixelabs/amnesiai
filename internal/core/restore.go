@@ -2,7 +2,11 @@ package core
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/thepixelabs/amnesiai/internal/crypto"
 	"github.com/thepixelabs/amnesiai/internal/provider"
@@ -15,11 +19,14 @@ const redactedMarker = "<REDACTED:"
 
 // RestoreOptions controls the restore operation.
 type RestoreOptions struct {
-	BackupID     string   // backup to restore (empty = latest)
-	Providers    []string // subset of providers to restore (empty = all from backup)
-	ProjectPaths []string // per-project directories forwarded to provider constructors
-	Passphrase   string   // decryption passphrase
-	DryRun       bool     // if true, report what would change without writing
+	BackupID     string                               // backup to restore (empty = latest)
+	Providers    []string                             // subset of providers to restore (empty = all from backup)
+	ProjectPaths []string                             // per-project directories forwarded to provider constructors
+	Overrides    map[string]provider.ProviderOverride // per-provider allowlist tweaks
+	Passphrase   string                               // decryption passphrase
+	DryRun       bool                                 // if true, report what would change without writing
+	OutDir       string                               // if set, extract to <OutDir>/... instead of real destinations
+	Force        bool                                 // for OutDir: allow non-empty target dir
 }
 
 // RestoreResult holds the outcome of a restore operation.
@@ -27,6 +34,7 @@ type RestoreResult struct {
 	BackupID          string
 	Providers         []string
 	DryRun            bool
+	OutDir            string
 	Files             int      // number of files restored
 	UnencryptedBackup bool     // true if the source backup was not encrypted
 	PlaceholderFiles  []string // archive paths of files that contain <REDACTED: markers
@@ -35,7 +43,6 @@ type RestoreResult struct {
 // Restore loads a backup from storage, decrypts it, extracts the archive,
 // and writes files back through the appropriate providers.
 func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error) {
-	// Determine which backup to load.
 	backupID := opts.BackupID
 	if backupID == "" {
 		latest, err := store.Latest()
@@ -45,31 +52,26 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		backupID = latest
 	}
 
-	// Load from storage.
 	meta, payload, err := store.Load(backupID)
 	if err != nil {
 		return nil, fmt.Errorf("load backup %s: %w", backupID, err)
 	}
 
-	// Decrypt.
 	payload, err = crypto.Decrypt(opts.Passphrase, payload)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt backup %s: %w", backupID, err)
 	}
 
-	// Extract archive.
 	archiveFiles, manifest, err := ExtractArchive(payload)
 	if err != nil {
 		return nil, fmt.Errorf("extract backup %s: %w", backupID, err)
 	}
 
-	// Determine which providers to restore.
 	restoreProviders := opts.Providers
 	if len(restoreProviders) == 0 {
 		restoreProviders = meta.Providers
 	}
 
-	// Build per-provider snapshots using the manifest.
 	providerSnapshots := make(map[string]map[string][]byte)
 	for _, entry := range manifest {
 		if !containsString(restoreProviders, entry.Provider) {
@@ -85,8 +87,8 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		providerSnapshots[entry.Provider][entry.OrigPath] = data
 	}
 
-	// Scan all files-to-restore for <REDACTED: markers so we can warn the user
-	// post-restore. Do this before the dry-run branch so it also works there.
+	// Scan all files for <REDACTED: markers so we can warn the user post-
+	// restore. Done before the dry-run branch so it applies to dry-run too.
 	var placeholderFiles []string
 	marker := []byte(redactedMarker)
 	for archPath, data := range archiveFiles {
@@ -104,14 +106,46 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 			BackupID:          backupID,
 			Providers:         restoreProviders,
 			DryRun:            true,
+			OutDir:            opts.OutDir,
 			Files:             fileCount,
 			UnencryptedBackup: !meta.Encrypted,
 			PlaceholderFiles:  placeholderFiles,
 		}, nil
 	}
 
-	// Restore through each provider.
+	// Out-dir mode: extract only, no live destinations touched.
+	if opts.OutDir != "" {
+		resolvedOut, err := validateOutDir(opts.OutDir, restoreProviders, opts.ProjectPaths, opts.Force)
+		if err != nil {
+			return nil, err
+		}
+		totalFiles := 0
+		for provName, snapshot := range providerSnapshots {
+			p, err := provider.Get(provName, provider.ProviderOpts{
+				ProjectPaths: opts.ProjectPaths,
+				Overrides:    opts.Overrides,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("get provider %s for restore: %w", provName, err)
+			}
+			if err := p.RestoreTo(resolvedOut, snapshot); err != nil {
+				return nil, fmt.Errorf("restore provider %s to %s: %w", provName, resolvedOut, err)
+			}
+			totalFiles += len(snapshot)
+		}
+		return &RestoreResult{
+			BackupID:          backupID,
+			Providers:         restoreProviders,
+			OutDir:            resolvedOut,
+			Files:             totalFiles,
+			UnencryptedBackup: !meta.Encrypted,
+			PlaceholderFiles:  placeholderFiles,
+		}, nil
+	}
+
+	// Live restore.
 	totalFiles := 0
+	var restoredProviders []string
 	for provName, snapshot := range providerSnapshots {
 		p, err := provider.Get(provName, provider.ProviderOpts{
 			ProjectPaths: opts.ProjectPaths,
@@ -119,20 +153,141 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		if err != nil {
 			return nil, fmt.Errorf("get provider %s for restore: %w", provName, err)
 		}
-		if err := p.Restore(snapshot); err != nil {
+		if err := p.RestoreTo("", snapshot); err != nil {
 			return nil, fmt.Errorf("restore provider %s: %w", provName, err)
 		}
+		restoredProviders = append(restoredProviders, provName)
 		totalFiles += len(snapshot)
 	}
 
 	return &RestoreResult{
 		BackupID:          backupID,
-		Providers:         restoreProviders,
+		Providers:         restoredProviders,
 		DryRun:            false,
 		Files:             totalFiles,
 		UnencryptedBackup: !meta.Encrypted,
 		PlaceholderFiles:  placeholderFiles,
 	}, nil
+}
+
+// validateOutDir ensures outDir is a safe inspection target:
+//   - resolves to an absolute path
+//   - is not equal to or inside any provider's baseDir
+//   - is not equal to or inside any configured project path
+//   - is empty, OR force=true (we still never delete pre-existing files)
+func validateOutDir(outDir string, providerNames []string, projectPaths []string, force bool) (string, error) {
+	if outDir == "" {
+		return "", errors.New("validateOutDir: empty path")
+	}
+	abs, err := filepath.Abs(outDir)
+	if err != nil {
+		return "", fmt.Errorf("resolve out-dir: %w", err)
+	}
+	// Resolve symlinks if the path exists; otherwise use the abs form so a
+	// not-yet-created dir is still acceptable.
+	if real, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = real
+	}
+
+	if err := refuseIfClashesProviders(abs, providerNames); err != nil {
+		return "", err
+	}
+	for _, proj := range projectPaths {
+		expanded := expandHomePath(proj)
+		expandedAbs, err := filepath.Abs(expanded)
+		if err != nil {
+			continue
+		}
+		if real, err := filepath.EvalSymlinks(expandedAbs); err == nil {
+			expandedAbs = real
+		}
+		if pathOverlaps(abs, expandedAbs) {
+			return "", fmt.Errorf("--out-dir %s overlaps configured project path %s; choose a different directory", abs, expandedAbs)
+		}
+	}
+
+	info, err := os.Stat(abs)
+	switch {
+	case os.IsNotExist(err):
+		if mkErr := os.MkdirAll(abs, 0700); mkErr != nil {
+			return "", fmt.Errorf("create out-dir: %w", mkErr)
+		}
+	case err != nil:
+		return "", fmt.Errorf("stat out-dir: %w", err)
+	default:
+		if !info.IsDir() {
+			return "", fmt.Errorf("--out-dir %s is not a directory", abs)
+		}
+		entries, _ := os.ReadDir(abs)
+		if len(entries) > 0 && !force {
+			return "", fmt.Errorf("--out-dir %s is not empty; pass --force to allow writing into it (existing files are never deleted)", abs)
+		}
+	}
+	return abs, nil
+}
+
+// refuseIfClashesProviders returns an error if outDir equals or contains any
+// provider's known base directory.
+func refuseIfClashesProviders(outDir string, providerNames []string) error {
+	if len(providerNames) == 0 {
+		providerNames = provider.Names()
+	}
+	for _, name := range providerNames {
+		p, err := provider.Get(name, provider.ProviderOpts{})
+		if err != nil {
+			continue
+		}
+		base := providerBaseDir(p)
+		if base == "" {
+			continue
+		}
+		baseAbs, err := filepath.Abs(base)
+		if err != nil {
+			continue
+		}
+		if real, err := filepath.EvalSymlinks(baseAbs); err == nil {
+			baseAbs = real
+		}
+		if pathOverlaps(outDir, baseAbs) {
+			return fmt.Errorf("--out-dir %s overlaps provider %s's base directory %s; choose a different directory", outDir, name, baseAbs)
+		}
+	}
+	return nil
+}
+
+// pathOverlaps returns true when a == b, a contains b, or b contains a.
+func pathOverlaps(a, b string) bool {
+	ca := filepath.Clean(a)
+	cb := filepath.Clean(b)
+	if ca == cb {
+		return true
+	}
+	sep := string(filepath.Separator)
+	return strings.HasPrefix(ca+sep, cb+sep) || strings.HasPrefix(cb+sep, ca+sep)
+}
+
+// providerBaseDir extracts a provider's base directory using a duck-typed
+// interface. Providers expose their base via baseDir()/base()/Base() in
+// various concrete types; rather than refactor every provider to surface this
+// uniformly, we use reflection-free type assertions on a tiny interface.
+func providerBaseDir(p provider.Provider) string {
+	type baseDirReporter interface{ BaseDir() string }
+	if b, ok := p.(baseDirReporter); ok {
+		return b.BaseDir()
+	}
+	return ""
+}
+
+// expandHomePath expands a leading "~/" into the user's home directory.
+func expandHomePath(p string) string {
+	if !strings.HasPrefix(p, "~/") {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return p
+	}
+	return filepath.Join(home, p[2:])
 }
 
 func containsString(slice []string, s string) bool {

@@ -14,6 +14,22 @@ import (
 // than changing factory signatures again.
 type ProviderOpts struct {
 	ProjectPaths []string // per-project directories to scan
+
+	// Overrides is keyed by provider name (e.g. "claude", "codex"). Each
+	// provider factory looks up its own entry to mutate the built-in
+	// allowlist before returning. Entries for unknown provider names are
+	// ignored by the factories (BuildOpts emits a warning when populating).
+	Overrides map[string]ProviderOverride
+}
+
+// ProviderOverride mirrors the user-facing config.ProviderOverride struct
+// without taking a dependency on the config package (keeps internal/provider
+// dependency-free of internal/config). Both lists are case-sensitive
+// basenames; ExtraFiles add to the default allowlist, ExcludeFiles remove
+// from the resulting set.
+type ProviderOverride struct {
+	ExtraFiles   []string
+	ExcludeFiles []string
 }
 
 // Factory lazily constructs a provider instance with the given options.
@@ -41,8 +57,12 @@ type Provider interface {
 	// Diff compares the current on-disk state to a previously saved snapshot.
 	Diff(snapshot map[string][]byte) ([]DiffEntry, error)
 
-	// Restore writes a snapshot back to disk, creating directories as needed.
-	Restore(snapshot map[string][]byte) error
+	// RestoreTo writes snapshot files to disk. When root is empty, files are
+	// written to their real destinations. When root is non-empty it is treated
+	// as a virtual filesystem root: global files land under <root>/<provider-base>/...,
+	// and per-project absolute keys are rewritten by stripping the leading "/"
+	// and joining under <root>. This powers `restore --out-dir` for inspection.
+	RestoreTo(root string, snapshot map[string][]byte) error
 }
 
 // registry holds all registered providers.

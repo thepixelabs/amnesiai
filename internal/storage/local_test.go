@@ -116,6 +116,72 @@ func TestLocalStorage_LatestOnEmptyStoreReturnsErrNoBackups(t *testing.T) {
 	}
 }
 
+// TestLocalStorage_DeleteRemovesBackup verifies that Delete drops a backup
+// from List and that subsequent Load returns an error.
+func TestLocalStorage_DeleteRemovesBackup(t *testing.T) {
+	s := newLocalStorage(t)
+
+	// Save two backups so we can prove Delete only removes the targeted one.
+	keep := storage.Metadata{
+		ID:        "keep-001",
+		Timestamp: time.Date(2024, 6, 1, 10, 0, 0, 0, time.UTC),
+		Providers: []string{"claude"},
+	}
+	doomed := storage.Metadata{
+		ID:        "doomed-002",
+		Timestamp: time.Date(2024, 6, 2, 10, 0, 0, 0, time.UTC),
+		Providers: []string{"claude"},
+	}
+	if _, err := s.Save("backup", keep, []byte("k")); err != nil {
+		t.Fatalf("Save keep: %v", err)
+	}
+	if _, err := s.Save("backup", doomed, []byte("d")); err != nil {
+		t.Fatalf("Save doomed: %v", err)
+	}
+
+	if err := s.Delete(doomed.ID); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	entries, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("List after delete: got %d entries, want 1 (%v)", len(entries), entries)
+	}
+	if entries[0].ID != keep.ID {
+		t.Errorf("surviving entry: got %q, want %q", entries[0].ID, keep.ID)
+	}
+
+	// Loading the deleted ID should now fail.
+	if _, _, err := s.Load(doomed.ID); err == nil {
+		t.Errorf("Load(%q) after delete: expected error, got nil", doomed.ID)
+	}
+}
+
+// TestLocalStorage_DeleteUnknownReturnsErrNotFound verifies that asking to
+// delete a non-existent ID surfaces ErrNotFound (so callers can distinguish
+// "already gone" from "I/O error").
+func TestLocalStorage_DeleteUnknownReturnsErrNotFound(t *testing.T) {
+	s := newLocalStorage(t)
+	if err := s.Delete("never-existed"); !errors.Is(err, storage.ErrNotFound) {
+		t.Errorf("Delete unknown: got %v, want ErrNotFound", err)
+	}
+}
+
+// TestLocalStorage_DeleteRejectsPathEscape verifies that ids containing path
+// separators or "../" are refused before reaching RemoveAll. This is defence-
+// in-depth against a buggy or malicious caller passing a crafted id.
+func TestLocalStorage_DeleteRejectsPathEscape(t *testing.T) {
+	s := newLocalStorage(t)
+	for _, bad := range []string{"../etc", "foo/bar", "..", "."} {
+		if err := s.Delete(bad); err == nil {
+			t.Errorf("Delete(%q): expected error, got nil", bad)
+		}
+	}
+}
+
 // TestLocalStorage_LatestReturnsNewestBackupID verifies that Latest returns
 // the ID of the most recently timestamped backup.
 func TestLocalStorage_LatestReturnsNewestBackupID(t *testing.T) {

@@ -10,18 +10,24 @@ import (
 	"github.com/thepixelabs/amnesiai/pkg/provider/copilot"
 )
 
-// populateFakeCopilotDir creates a directory structure representing a Copilot
-// config directory.
+// populateFakeCopilotDir creates a directory structure representing the
+// modern GitHub Copilot CLI config directory (~/.copilot/).
 //
 //	<base>/
-//	  hosts.json              <-- must be included
-//	  settings.json           <-- must be included
-//	  token.json              <-- excluded: name contains "token"
-//	  github_token            <-- excluded: name contains "token"
-//	  secret_store.json       <-- excluded: name contains "secret"
-//	  api_key.json            <-- excluded: name contains "key"
-//	  auth.json               <-- excluded: name contains "auth"
-//	  oauth_token.json        <-- excluded: name contains "token"
+//	  settings.json                            <-- must be included
+//	  config.json                              <-- must be included
+//	  mcp-config.json                          <-- must be included
+//	  lsp-config.json                          <-- must be included
+//	  agents/foo.agent.md                      <-- must be included (markdown agent def)
+//	  agents/notes.txt                         <-- excluded: not markdown
+//	  command-history-state.json               <-- excluded: not in allowlist
+//	  logs/some.log                            <-- excluded: logs/ not allowed
+//	  token.json                               <-- excluded: name contains "token"
+//	  github_token                             <-- excluded: name contains "token"
+//	  secret_store.json                        <-- excluded: name contains "secret"
+//	  api_key.json                             <-- excluded: name contains "key"
+//	  auth.json                                <-- excluded: name contains "auth"
+//	  oauth_token.json                         <-- excluded: name contains "token"
 func populateFakeCopilotDir(t *testing.T, base string) {
 	t.Helper()
 	mustWrite := func(path, content string) {
@@ -34,8 +40,14 @@ func populateFakeCopilotDir(t *testing.T, base string) {
 		}
 	}
 
-	mustWrite(filepath.Join(base, "hosts.json"), `{"github.com":{}}`)
 	mustWrite(filepath.Join(base, "settings.json"), `{"editor":"vscode"}`)
+	mustWrite(filepath.Join(base, "config.json"), `{"trustedFolders":[]}`)
+	mustWrite(filepath.Join(base, "mcp-config.json"), `{"mcpServers":{}}`)
+	mustWrite(filepath.Join(base, "lsp-config.json"), `{"servers":{}}`)
+	mustWrite(filepath.Join(base, "agents", "foo.agent.md"), "# foo agent")
+	mustWrite(filepath.Join(base, "agents", "notes.txt"), "not a markdown file")
+	mustWrite(filepath.Join(base, "command-history-state.json"), `{"items":[]}`)
+	mustWrite(filepath.Join(base, "logs", "some.log"), "log line")
 	mustWrite(filepath.Join(base, "token.json"), `{"access_token":"secret"}`)
 	mustWrite(filepath.Join(base, "github_token"), "ghp_xxxxxx")
 	mustWrite(filepath.Join(base, "secret_store.json"), `{"secret":"value"}`)
@@ -68,10 +80,9 @@ func TestCopilotDiscover_ExcludesFilesWithSensitiveNames(t *testing.T) {
 	}
 }
 
-// TestCopilotDiscover_IncludesHostsJSON verifies that hosts.json is discovered.
-// The file holds hostname settings, not credentials — actual tokens are in the
-// OS keychain.
-func TestCopilotDiscover_IncludesHostsJSON(t *testing.T) {
+// TestCopilotDiscover_IncludesAllowlistedFiles verifies the four canonical
+// top-level config files are returned by Discover.
+func TestCopilotDiscover_IncludesAllowlistedFiles(t *testing.T) {
 	base := t.TempDir()
 	populateFakeCopilotDir(t, base)
 
@@ -81,17 +92,21 @@ func TestCopilotDiscover_IncludesHostsJSON(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 
-	for _, path := range paths {
-		if filepath.Base(path) == "hosts.json" {
-			return // found — test passes
+	got := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		got[filepath.Base(p)] = true
+	}
+	for _, want := range []string{"settings.json", "config.json", "mcp-config.json", "lsp-config.json"} {
+		if !got[want] {
+			t.Errorf("Discover did not return %q", want)
 		}
 	}
-	t.Error("Discover did not return hosts.json, but it must be included")
 }
 
-// TestCopilotDiscover_ReturnsOnlyNonSensitiveJSONFiles verifies the complete
-// set of discovered global files against expected inclusions and exclusions.
-func TestCopilotDiscover_ReturnsOnlyNonSensitiveJSONFiles(t *testing.T) {
+// TestCopilotDiscover_ReturnsAllowlistedFilesAndAgents verifies the complete
+// expected set of discovered files (top-level allowlist + agents/*.agent.md)
+// and that nothing else slips in.
+func TestCopilotDiscover_ReturnsAllowlistedFilesAndAgents(t *testing.T) {
 	base := t.TempDir()
 	populateFakeCopilotDir(t, base)
 
@@ -101,21 +116,28 @@ func TestCopilotDiscover_ReturnsOnlyNonSensitiveJSONFiles(t *testing.T) {
 		t.Fatalf("Discover: %v", err)
 	}
 
-	names := make([]string, 0, len(paths))
-	for _, path := range paths {
-		names = append(names, filepath.Base(path))
+	rel := make([]string, 0, len(paths))
+	for _, abs := range paths {
+		r, _ := filepath.Rel(base, abs)
+		rel = append(rel, r)
 	}
-	sort.Strings(names)
+	sort.Strings(rel)
 
-	// Only hosts.json and settings.json should survive.
-	want := []string{"hosts.json", "settings.json"}
+	want := []string{
+		filepath.Join("agents", "foo.agent.md"),
+		"config.json",
+		"lsp-config.json",
+		"mcp-config.json",
+		"settings.json",
+	}
+	sort.Strings(want)
 
-	if len(names) != len(want) {
-		t.Fatalf("Discover returned %d files, want %d:\n  got:  %v\n  want: %v", len(names), len(want), names, want)
+	if len(rel) != len(want) {
+		t.Fatalf("Discover returned %d files, want %d:\n  got:  %v\n  want: %v", len(rel), len(want), rel, want)
 	}
 	for i := range want {
-		if names[i] != want[i] {
-			t.Errorf("files[%d]: got %q, want %q", i, names[i], want[i])
+		if rel[i] != want[i] {
+			t.Errorf("files[%d]: got %q, want %q", i, rel[i], want[i])
 		}
 	}
 }
@@ -293,10 +315,10 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Read: %v", err)
 		}
 
-		// Write a new non-sensitive JSON file that passes the allowlist.
-		newFile := filepath.Join(base, "profiles.json")
-		if err := os.WriteFile(newFile, []byte(`{"default":"work"}`), 0600); err != nil {
-			t.Fatalf("write profiles.json: %v", err)
+		// Write a new agent definition file that passes the allowlist.
+		newFile := filepath.Join(base, "agents", "bar.agent.md")
+		if err := os.WriteFile(newFile, []byte("# bar agent"), 0600); err != nil {
+			t.Fatalf("write bar.agent.md: %v", err)
 		}
 
 		entries, err := p.Diff(snapshot)
@@ -304,16 +326,17 @@ func TestDiff_StatusCases(t *testing.T) {
 			t.Fatalf("Diff: %v", err)
 		}
 		found := false
+		want := filepath.Join("agents", "bar.agent.md")
 		for _, e := range entries {
-			if e.Path == "profiles.json" {
+			if e.Path == want {
 				found = true
 				if e.Status != "added" {
-					t.Errorf("profiles.json: got status %q, want %q", e.Status, "added")
+					t.Errorf("%s: got status %q, want %q", want, e.Status, "added")
 				}
 			}
 		}
 		if !found {
-			t.Error("Diff did not return an entry for newly added profiles.json")
+			t.Errorf("Diff did not return an entry for newly added %s", want)
 		}
 	})
 

@@ -18,19 +18,52 @@ type GitRemote struct {
 	Branch string `mapstructure:"branch"`
 }
 
+// Retention controls automatic and manual pruning of old backups. A backup is
+// kept when EITHER its age is below MaxAgeDays OR its index in the
+// newest-first list is below KeepLast. Setting both to zero disables
+// retention completely (the historical behaviour: nothing is ever auto-deleted).
+//
+// AutoPrune, when true, runs the retention policy after each successful backup.
+// Defaults are zero/false so existing installs see no behaviour change after
+// upgrade — retention is strictly opt-in.
+type Retention struct {
+	KeepLast   int  `mapstructure:"keep_last"`    // always keep the N most recent (0 = no count limit)
+	MaxAgeDays int  `mapstructure:"max_age_days"` // delete backups older than this (0 = no age limit)
+	AutoPrune  bool `mapstructure:"auto_prune"`   // run pruning after every successful backup
+}
+
+// ProviderOverride lets a user extend or shrink a provider's built-in
+// allowlist without forking the code. Both fields are optional. An entry's
+// matching is by file basename; subdirectory walking is not extended.
+//
+//   - ExtraFiles is added to the provider's default allowlist on top of the
+//     built-in defaults. Use it to back up files the upstream tool added that
+//     amnesiai doesn't yet know about.
+//   - ExcludeFiles is removed from the effective allowlist after extras are
+//     applied. Use it to skip a file that amnesiai backs up by default but you
+//     don't want versioned (e.g. a hostnames-bearing settings file).
+//
+// Both lists are case-sensitive basenames (e.g. "settings.json", "agents.md").
+type ProviderOverride struct {
+	ExtraFiles   []string `mapstructure:"extra_files"`
+	ExcludeFiles []string `mapstructure:"exclude_files"`
+}
+
 // Config holds the top-level amnesiai configuration.
 type Config struct {
-	StorageMode  string    `mapstructure:"storage_mode"`  // "local" | "git-local" | "git-remote"
-	BackupDir    string    `mapstructure:"backup_dir"`    // absolute path for backups
-	Providers    []string  `mapstructure:"providers"`     // ["claude","gemini","copilot","codex"] or subset
-	GitRemote    GitRemote `mapstructure:"git_remote"`
-	AutoCommit   bool      `mapstructure:"auto_commit"`   // true=commit automatically
-	AutoPush     bool      `mapstructure:"auto_push"`     // true=push automatically (git-remote only)
-	BackupCount  int       `mapstructure:"backup_count"`  // total successful backups taken
-	FirstRun     bool      `mapstructure:"first_run"`     // true until first successful backup
-	VerboseHelp  bool      `mapstructure:"verbose_help"`  // show extended help text
-	Telemetry    bool      `mapstructure:"telemetry"`     // opt-in usage telemetry
-	ProjectPaths []string  `mapstructure:"project_paths"` // per-project dirs to scan for CLAUDE.md, copilot-instructions.md
+	StorageMode       string                      `mapstructure:"storage_mode"` // "local" | "git-local" | "git-remote"
+	BackupDir         string                      `mapstructure:"backup_dir"`   // absolute path for backups
+	Providers         []string                    `mapstructure:"providers"`    // ["claude","gemini","copilot","codex"] or subset
+	GitRemote         GitRemote                   `mapstructure:"git_remote"`
+	AutoCommit        bool                        `mapstructure:"auto_commit"`        // true=commit automatically
+	AutoPush          bool                        `mapstructure:"auto_push"`          // true=push automatically (git-remote only)
+	BackupCount       int                         `mapstructure:"backup_count"`       // total successful backups taken
+	FirstRun          bool                        `mapstructure:"first_run"`          // true until first successful backup
+	VerboseHelp       bool                        `mapstructure:"verbose_help"`       // show extended help text
+	BackupShowFiles   bool                        `mapstructure:"backup_show_files"`  // print full per-file path list after a backup; false = counts only
+	ProjectPaths      []string                    `mapstructure:"project_paths"`      // per-project dirs to scan for CLAUDE.md, copilot-instructions.md
+	ProviderOverrides map[string]ProviderOverride `mapstructure:"provider_overrides"` // per-provider allowlist tweaks (key = provider name)
+	Retention         Retention                   `mapstructure:"retention"`          // pruning / retention policy (opt-in: zero values = disabled)
 }
 
 // DefaultProviders returns the full list of supported provider names.
@@ -48,12 +81,17 @@ func DefaultConfig() Config {
 		GitRemote: GitRemote{
 			Branch: "main",
 		},
-		AutoCommit:  true,
-		AutoPush:    false,
-		BackupCount: 0,
-		FirstRun:    true,
-		VerboseHelp: false,
-		Telemetry:   false,
+		AutoCommit:      true,
+		AutoPush:        false,
+		BackupCount:     0,
+		FirstRun:        true,
+		VerboseHelp:     false,
+		BackupShowFiles: false,
+		Retention: Retention{
+			KeepLast:   0,
+			MaxAgeDays: 0,
+			AutoPrune:  false,
+		},
 	}
 }
 
@@ -92,8 +130,12 @@ func Load(v *viper.Viper) (Config, error) {
 	v.SetDefault("backup_count", 0)
 	v.SetDefault("first_run", true)
 	v.SetDefault("verbose_help", false)
-	v.SetDefault("telemetry", false)
+	v.SetDefault("backup_show_files", false)
 	v.SetDefault("project_paths", []string{})
+	v.SetDefault("provider_overrides", map[string]any{})
+	v.SetDefault("retention.keep_last", defaults.Retention.KeepLast)
+	v.SetDefault("retention.max_age_days", defaults.Retention.MaxAgeDays)
+	v.SetDefault("retention.auto_prune", defaults.Retention.AutoPrune)
 
 	// Unmarshal into a zero-value struct so that viper's effective value for
 	// each key (file > env > default) is written without interference from
@@ -123,8 +165,14 @@ func SaveTo(cfg Config, cfgPath string) error {
 	v.Set("backup_count", cfg.BackupCount)
 	v.Set("first_run", cfg.FirstRun)
 	v.Set("verbose_help", cfg.VerboseHelp)
-	v.Set("telemetry", cfg.Telemetry)
+	v.Set("backup_show_files", cfg.BackupShowFiles)
 	v.Set("project_paths", cfg.ProjectPaths)
+	if len(cfg.ProviderOverrides) > 0 {
+		v.Set("provider_overrides", cfg.ProviderOverrides)
+	}
+	v.Set("retention.keep_last", cfg.Retention.KeepLast)
+	v.Set("retention.max_age_days", cfg.Retention.MaxAgeDays)
+	v.Set("retention.auto_prune", cfg.Retention.AutoPrune)
 
 	if err := v.WriteConfigAs(cfgPath); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
@@ -181,6 +229,18 @@ func Validate(cfg Config) error {
 		if !filepath.IsAbs(p) && !strings.HasPrefix(p, "~") {
 			return fmt.Errorf("project_paths: %q must be an absolute path or start with ~", p)
 		}
+	}
+
+	// provider_overrides: warn-but-allow on unknown provider names so a stale
+	// config doesn't brick the binary. The actual warning is emitted by the
+	// caller (see internal/provider.BuildOpts) which has access to the live
+	// registry of provider names.
+
+	if cfg.Retention.KeepLast < 0 {
+		return fmt.Errorf("retention.keep_last must be >= 0, got %d", cfg.Retention.KeepLast)
+	}
+	if cfg.Retention.MaxAgeDays < 0 {
+		return fmt.Errorf("retention.max_age_days must be >= 0, got %d", cfg.Retention.MaxAgeDays)
 	}
 
 	return nil

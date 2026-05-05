@@ -1,15 +1,27 @@
+version: "2"
+
 linters:
+  default: none
   enable:
     - errcheck
     - govet
     - staticcheck
     - unused
-    - gofmt
-    - gosimple
+  settings:
+    errcheck:
+      # CLI write convenience helpers — error is safe to drop. Anything that
+      # could lose user data (file IO, network) is still checked.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
 
-linters-settings:
-  gofmt:
-    simplify: true
+formatters:
+  enable:
+    - gofmt
+  settings:
+    gofmt:
+      simplify: true
 
 issues:
   max-same-issues: 5

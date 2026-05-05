@@ -9,19 +9,17 @@ import "github.com/charmbracelet/lipgloss"
 
 // Hex colour stops — ocean palette.
 const (
-	wCyan      = "#00d7ff" // electric cyan — gradient stop 0, prompt accent
-	wBlue      = "#005fd7" // slate blue    — gradient stop 1
-	wIndigoHex = "#8787ff" // brand indigo  — accent / brand
-	wGreen     = "#5faf5f" // success
-	wAmber     = "#ffaf00" // warning
-	wDim       = "#585858" // muted / de-emphasised
-	wWhite     = "#d0d0d0" // normal body text
+	wCyan  = "#00d7ff" // electric cyan — gradient stop 0, prompt accent
+	wBlue  = "#005fd7" // slate blue    — gradient stop 1
+	wGreen = "#5faf5f" // success
+	wAmber = "#ffaf00" // warning
+	wDim   = "#585858" // muted / de-emphasised
+	wWhite = "#d0d0d0" // normal body text
 )
 
 // Pre-built lipgloss styles derived from the palette above.
 var (
 	wAccent  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wCyan))
-	wIndigo  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wIndigoHex))
 	wSuccess = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wGreen))
 	wWarn    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color(wAmber))
 	wMuted   = lipgloss.NewStyle().Foreground(lipgloss.Color(wDim))

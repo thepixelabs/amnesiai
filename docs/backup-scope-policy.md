@@ -2,7 +2,7 @@
 
 **Status:** Authoritative  
 **Audience:** Contributors, security auditors, users evaluating trust  
-**Note:** This document is provided for transparency — it is not a legal instrument. It codifies team decisions for auditability. It has not been reviewed by legal counsel and does not constitute legal advice.
+**Note:** This document is provided for transparency — it is not a legal instrument. It documents the rationale for scope decisions. It has not been reviewed by legal counsel and does not constitute legal advice.
 
 ---
 
@@ -23,7 +23,7 @@ These rules apply to all four providers and to any future provider. A scope chan
 | P3 | **Credentials are never touched.** No file whose name matches a credential pattern is read, backed up, or restored, even if it appears inside an otherwise in-scope directory. Guards exist at both Discover() and Restore(). |
 | P4 | **Instruction files are never parsed for operational instructions.** CLAUDE.md, GEMINI.md, copilot-instructions.md, and instructions.md are treated as opaque byte blobs. amnesiai does not execute, interpret, or act on their contents. |
 | P5 | **Fail closed on scan errors.** If the gitleaks scan cannot complete, the backup is aborted. No partial backups with unknown secret exposure. |
-| P6 | **No symlink traversal.** Every provider uses `os.Lstat` to detect and skip symlinks at both file and directory level. |
+| P6 | **Controlled symlink handling.** Symlinks-to-files are followed so dotfile-manager setups work correctly. Symlinks-to-directories are always skipped to avoid traversal loops. On restore, if the destination is a symlink the write goes through to the symlink target — the link itself is never replaced with a regular file. |
 | P7 | **Path traversal is rejected at restore.** Every provider validates that the resolved destination path is a descendant of the provider's base directory before writing. |
 | P8 | **metadata.json leaks nothing sensitive.** The unencrypted sidecar contains: tool categories changed, file counts, timestamp, ciphertext SHA256. It never contains filenames, paths, or file content. |
 | P9 | **Hooks changes require explicit separate confirmation on restore.** Hooks can execute arbitrary code. A diff is shown and a second confirmation is required before any hook-bearing file is written. |
@@ -36,16 +36,19 @@ These rules apply to all four providers and to any future provider. A scope chan
 ### 3.1 Claude Code (`~/.claude/`)
 
 Implementation: `pkg/provider/claude/claude.go`  
-Strategy: walk the base directory; apply a directory blocklist and a file blocklist.
+Strategy: explicit top-level file allowlist (`CLAUDE.md`, `settings.json`, `keybindings.json`) plus recursive walking of `agents/`, `commands/`, and `skills/` subdirectories.
 
 | Path | Status | Rationale |
 |------|--------|-----------|
 | `~/.claude/CLAUDE.md` | IN | Global user instructions — the primary artifact being backed up. |
 | `~/.claude/settings.json` | IN | Hooks, permissions, model preferences. Gitleaks scans for inline secrets. |
 | `~/.claude/keybindings.json` | IN (if present) | User-authored key bindings. |
-| Any other file directly under `~/.claude/` | IN | Walk is permissive at the file level outside excluded dirs/files — see Known Gaps §7. |
-| Per-project `<project>/CLAUDE.md` | IN | Project-scoped instructions. Discovered during project-level backup (see §7). |
-| Per-project `<project>/.claude/settings.json` | IN | Project-scoped hooks and permissions. |
+| `~/.claude/agents/*.md` | IN | User-authored subagent definitions. |
+| `~/.claude/commands/*.md` | IN | User-authored slash commands. |
+| `~/.claude/skills/<name>/*` | IN | User-authored agent skills (every non-hidden file under each skill dir). |
+| Any other file directly under `~/.claude/` | OUT | Explicit allowlist — unknown files are excluded by default (P2). |
+| Per-project `<project>/CLAUDE.md` | IN | Project-scoped instructions. Discovered for each path in `project_paths`. |
+| Per-project `<project>/.claude/settings.json` | IN | Project-scoped hooks and permissions (NOT settings.local.json). |
 | `~/.claude/projects/` | OUT | Conversation history. May contain PII, business context, third-party data. |
 | `~/.claude/statsig/` | OUT | Internal telemetry state owned by Anthropic tooling. Not user-authored. |
 | `~/.claude/todos/` | OUT | Ephemeral task lists. May contain names, business context, partial credentials. Not portable across machines. |
@@ -56,51 +59,66 @@ Strategy: walk the base directory; apply a directory blocklist and a file blockl
 ### 3.2 Gemini CLI (`~/.gemini/`)
 
 Implementation: `pkg/provider/gemini/gemini.go`  
-Strategy: explicit top-level allowlist (`settings.json`, `GEMINI.md`, `themes/`). Anything not in the allowlist is skipped at directory entry without descending.
+Strategy: explicit top-level file allowlist (`settings.json`, `GEMINI.md`, `projects.json`, `trustedFolders.json`) plus recursive walking of `themes/`, `agents/`, `commands/`, and `extensions/`. Anything not in the allowlist is skipped at directory entry without descending.
 
 | Path | Status | Rationale |
 |------|--------|-----------|
 | `~/.gemini/settings.json` | IN | Includes `customInstructions` and MCP server config. Gitleaks scans for API keys. |
 | `~/.gemini/GEMINI.md` | IN | User-authored global instructions. |
+| `~/.gemini/projects.json` | IN | Which project paths the user has trusted. |
+| `~/.gemini/trustedFolders.json` | IN | Per-folder trust. |
 | `~/.gemini/themes/` (all files) | IN | User-authored UI themes. |
-| `~/.gemini/antigravity/mcp_config.json` | OUT (code gap — see §7) | Planned IN per project decisions; not in current allowedTopLevel. |
+| `~/.gemini/agents/` (all files) | IN | User-authored subagent definitions. |
+| `~/.gemini/commands/` (all files) | IN | User-authored slash commands. |
+| `~/.gemini/extensions/` (all files) | IN | User-installed CLI extensions. |
+| `~/.gemini/antigravity/mcp_config.json` | OUT (code gap — see §6) | Planned IN per project decisions; not in current `allowedTopLevelDirs`. |
 | Any file whose name starts with `auth` (case-insensitive) | OUT | OAuth tokens and auth state. |
 | Any file whose name ends with `.key` | OUT | Cryptographic key material. |
+| Any file containing `oauth`, `creds`, `credential`, `token`, or `secret` (case-insensitive) | OUT | Credential material. |
 | Everything else under `~/.gemini/` | OUT | Not in allowlist; skipped by default (P2). |
 
 ### 3.3 GitHub Copilot
 
 Implementation: `pkg/provider/copilot/copilot.go`  
-Base directory (OS-dependent):
-- macOS: `~/Library/Application Support/GitHub Copilot/`
-- Linux: `~/.config/github-copilot/`
-- Windows: `%APPDATA%/GitHub Copilot/`
+Base directory: `~/.copilot/` (all platforms); override with `COPILOT_HOME` env var.  
+The legacy `~/Library/Application Support/GitHub Copilot/` path (macOS, VS Code-bundled extension) is out of scope.
 
-Strategy: walk the base directory; include all `*.json` files that do not match a sensitive-name filter.
+Strategy: explicit top-level file allowlist plus a recursive `agents/` directory; sensitive-named files excluded at both Discover() and Restore().
 
 | Path | Status | Rationale |
 |------|--------|-----------|
-| `hosts.json` | IN | Hostname-to-settings mapping. Tokens are in the OS keychain, not in this file. |
-| `<base>/*.json` (non-sensitive) | IN | All JSON config files not matching the sensitive-name filter. |
-| `.github/copilot-instructions.md` | IN (per decisions; see §7) | Repository-level Copilot instructions. Not in current provider code. |
-| VS Code `github.copilot.*` settings extraction | OUT (Phase 3) | Surgical extraction of Copilot-scoped keys from VS Code settings.json deferred to Phase 3. Whole-file VS Code backup is never done. |
-| Any file whose name contains `token`, `secret`, `key`, `credential`, or `auth` (case-insensitive) | OUT | Sensitive credential terms — excluded at Discover() and Restore(). |
-| All non-JSON files | OUT | Only JSON is in scope; other file types are skipped. |
+| `settings.json` | IN | User-editable settings (themes, defaults, etc.) |
+| `config.json` | IN | App state including trustedFolders and allowed_urls |
+| `mcp-config.json` | IN | MCP server configuration; Bearer headers caught by the secret scanner |
+| `lsp-config.json` | IN | Language Server Protocol configuration |
+| `agents/*.md` | IN | User-authored custom agents |
+| Per-project `.github/copilot-instructions.md` | IN | Repository-level Copilot instructions; discovered for each path in `project_paths` |
+| `command-history-state.json` | OUT | Chat/command history |
+| `logs/`, `session-state/`, `ide/` | OUT | Machine-local runtime state |
+| `skills/`, `hooks/` | OUT | Executable code; out of scope for v1 |
+| Any file whose name contains `token`, `secret`, `key`, `credential`, or `auth` (case-insensitive) | OUT | Sensitive credential terms — excluded at Discover() and Restore() |
 
 ### 3.4 OpenAI Codex CLI (`~/.codex/`)
 
 Implementation: `pkg/provider/codex/codex.go`  
-Strategy: explicit top-level allowlist (`config.json`, `instructions.md`, `themes/`).
+Strategy: explicit top-level file allowlist plus recursive directory walking for `agents/`, `rules/`, `memories/`, and `skills/`.
 
 | Path | Status | Rationale |
 |------|--------|-----------|
-| `~/.codex/config.json` | IN | Model preferences and tool configuration. |
-| `~/.codex/instructions.md` | IN | User-authored global instructions. |
-| `~/.codex/themes/` (all files) | IN | User-authored UI themes. |
-| `~/.codex/agents/*.toml` | OUT (code gap — see §7) | Planned IN per project decisions; not in current allowedTopLevel. |
-| `~/.codex/rules/default.rules` | OUT (code gap — see §7) | Planned IN per project decisions; not in current allowedTopLevel. |
-| Any file whose name ends with `.key`, contains `token`, or contains `credential` | OUT | Credential/key material. |
-| Everything else under `~/.codex/` | OUT | Not in allowlist; skipped by default (P2). |
+| `~/.codex/config.toml` | IN | Top-level Codex CLI configuration |
+| `~/.codex/AGENTS.md` | IN | Custom instructions (if present) |
+| `~/.codex/instructions.md` | IN | Legacy instructions file (if present) |
+| `~/.codex/agents/*.toml` | IN | User-authored agent definitions |
+| `~/.codex/rules/default.rules` | IN | Global behavioural rules |
+| `~/.codex/memories/**` | IN | Durable Codex memory files |
+| `~/.codex/skills/**` (excluding `.system/`) | IN | User-authored skills; `.system/` ships with the binary and is excluded |
+| `auth.json`, `history.jsonl` | OUT | Auth state, conversation history |
+| `sessions/`, `log/`, `cache/`, `.tmp/`, `tmp/` | OUT | Runtime state, logs, caches |
+| `*.sqlite*`, `models_cache.json`, `installation_id`, `version.json` | OUT | Machine-local runtime metadata |
+| `.personality_migration`, `shell_snapshots/` | OUT | Migration markers, ephemeral shell state |
+| `skills/.system/` | OUT | Binary-shipped skills; replaced on every update |
+| Any `*.key` or file containing `token`, `credential`, `auth`, `secret` (case-insensitive) | OUT | Credential/key material |
+| Everything else under `~/.codex/` | OUT | Not in allowlist; skipped by default (P2) |
 
 ---
 
@@ -150,120 +168,58 @@ Never contains: filenames, file paths, file content, raw secret values, passphra
 
 ---
 
-## 5. Telemetry Policy
+## 5. Change Management
 
-### 5.1 Opt-in only
-
-Telemetry is disabled by default. It is activated only when `telemetry = true` is set explicitly in `~/.amnesiai/config.toml`.
-
-### 5.2 Storage
-
-- Written to `~/.amnesiai/metrics.json`.
-- File permissions: `0600`.
-- Local only. The file is never transmitted anywhere automatically.
-- Not included in bug reports without explicit user action (user must manually copy and share the file).
-
-### 5.3 What IS captured (counts only)
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `backup_count` | integer | Number of completed backup operations |
-| `passphrase_mismatch_count` | integer | Number of passphrase confirmation failures |
-| `help_key_presses` | map[screen → integer] | Count of help keystrokes per UI screen |
-| `label_skip_count` | integer | Number of times backup label entry was skipped |
-| `flow_abort_count` | map[screen → integer] | Count of flow aborts per UI screen |
-
-### 5.4 What is NEVER captured
-
-- Label text or any user-entered string
-- Provider file contents
-- File paths or filenames
-- Passphrase or passphrase length
-- Error messages or stack traces
-- IP address, hostname, or any device identifier
-- Timestamps of individual operations
-
----
-
-## 6. Change Management
-
-### 6.1 What requires a compliance review
+### 5.1 What requires a compliance review
 
 Any of the following changes must update this document and receive approval from a CODEOWNERS-designated reviewer before merge:
 
 - Adding a path to any provider's in-scope set
 - Loosening a credential filter (e.g., narrowing the `sensitiveTerms` list)
 - Removing an excluded directory or file from any blocklist
-- Changing the telemetry field list (additions or removals)
 - Changing what metadata.json contains
 - Changing the gitleaks integration behavior (report-only vs. redact, abort conditions)
 
-### 6.2 CODEOWNERS coverage
+### 5.2 CODEOWNERS coverage
 
 The following paths must have CODEOWNERS entries requiring explicit reviewer approval:
 
 - `pkg/provider/*/` (all provider implementations)
 - `docs/backup-scope-policy.md` (this file)
 - `internal/sanitize/` or equivalent gitleaks integration package
-- `~/.amnesiai/` config and telemetry paths (in any code that writes them)
+- Any code that writes to `~/.amnesiai/config.toml` or `~/.amnesiai/state.json`
 
-### 6.3 Audit trail
+### 5.3 Audit trail
 
-Each scope decision should be traceable to a dated decision record. The current authoritative source is `project_decisions.md` in the project memory. Future decisions should be recorded in a `docs/decisions/` ADR directory.
+Each scope decision should be traceable to a dated decision record. Future decisions should be recorded in a `docs/decisions/` ADR directory.
 
 ---
 
-## 7. Known Gaps
+## 6. Known Gaps
 
-These are code-vs-policy divergences found during this audit. They are not decisions — they are open items requiring team resolution.
+The following are known divergences between this document and the current code. They are open issues — contributions to close them are welcome.
 
-### GAP-01: Claude provider is permissive beyond the named files
+### GAP-01: Claude provider top-level allowlist is now explicit
 
-**Severity: Medium**
+**Status: Resolved**
 
-The claude provider walks `~/.claude/` and backs up ALL files not in `excludedDirs` or `excludedFiles`. This means any new file Anthropic tooling creates under `~/.claude/` (outside the blocked dirs) will be silently included in the next backup — no allowlist gates it. Project decisions and this policy list only three specific files (CLAUDE.md, settings.json, keybindings.json) as in-scope at the top level. **Decision needed:** Should the claude provider be tightened to an explicit top-level allowlist matching the other providers, or is open-ended capture of `~/.claude/` top-level files intentional?
+The claude provider now uses an explicit top-level allowlist (`CLAUDE.md`, `settings.json`, `keybindings.json`) matching the other providers. Unknown new files under `~/.claude/` are excluded by default (P2).
 
 ### GAP-02: Gemini `mcp_config.json` is planned IN but not implemented
 
 **Severity: Low**
 
-`project_decisions.md` lists `~/.gemini/antigravity/mcp_config.json` as in scope. The current allowedTopLevel for the gemini provider does not include `antigravity/`. This file is currently not backed up. The plan also mentions API key redaction for this file; that redaction requirement needs to be verified against gitleaks rule coverage before the path is added.
+The Gemini provider's `allowedTopLevelDirs` does not currently include `antigravity/`, so `~/.gemini/antigravity/mcp_config.json` is not backed up. Adding it requires verifying that gitleaks rule coverage will redact any embedded API keys before the path is enabled.
 
-### GAP-03: Codex `agents/*.toml` and `rules/default.rules` are planned IN but not implemented
-
-**Severity: Medium**
-
-`project_decisions.md` and `plan.md` explicitly list `~/.codex/agents/*.toml` and `~/.codex/rules/default.rules` as in-scope. The current allowedTopLevel for the codex provider contains only `config.json`, `instructions.md`, and `themes/`. Neither `agents/` nor `rules/` is included. These are core artifacts per the project plan and their absence is a functional gap, not a conservative scope decision.
-
-### GAP-04: `.github/copilot-instructions.md` not in the Copilot provider
-
-**Severity: Medium**
-
-`project_decisions.md` and `plan.md` list `.github/copilot-instructions.md` as in scope. The current copilot provider only scans the OS-specific Copilot config directory. Repository-level instruction files are not discovered or backed up. This is a significant gap since copilot-instructions.md is arguably the most important Copilot customization artifact.
-
-### GAP-05: Per-project CLAUDE.md and `.claude/settings.json` discovery is undefined
-
-**Severity: Medium**
-
-The policy calls for backing up per-project `<project>/CLAUDE.md` and `<project>/.claude/settings.json`. The current claude provider only walks `~/.claude/`. There is no code that discovers project-level files. The mechanism for enumerating projects (cwd? a configured project list? scanning known directories?) is not defined or implemented.
-
-### GAP-06: Copilot `hosts.json` — verify it is truly credential-free
+### GAP-03: Codex exclusion filter alignment
 
 **Severity: Low**
 
-The code comment asserts that `hosts.json` contains "hostname → settings, not tokens" because tokens are stored in the OS keychain. This assumption should be validated against the current GitHub Copilot CLI release before a v1 ship. If a Copilot version ever writes a token fallback into `hosts.json`, the current name-based filter will not catch it because the filename does not contain any of the `sensitiveTerms`. Recommend adding a structural content check (look for `"token"` keys in JSON) as a defense-in-depth measure, or confirming via Copilot CLI source/documentation.
-
-### GAP-07: Codex exclusion filter does not include `auth` or `secret`
-
-**Severity: Low**
-
-The gemini provider excludes `auth*` files and the copilot provider excludes names containing `auth` and `secret`. The codex `isExcludedFile` function only checks for `.key`, `token`, and `credential`. If the Codex CLI ever writes an `auth.json` or `secret.json` under `~/.codex/`, it would not be caught by the current filter. The allowlist mitigates this (only `config.json`, `instructions.md`, and `themes/` are in scope), but the filter inconsistency is worth aligning for defense-in-depth.
+The gemini provider excludes `auth*` files and the copilot provider excludes names containing `auth` and `secret`. The codex `isExcludedFile` function checks for `.key`, `token`, `credential`, `auth`, and `secret`. The explicit allowlist provides defense-in-depth regardless, but the filter consistency is intentional.
 
 ---
 
-## 8. User-Facing Summary
-
-For README / landing page "What we back up / What we don't" section:
+## 7. Summary
 
 **We back up:**
 - Your AI assistant system prompts and custom instructions (Claude, Gemini, Copilot, Codex)
@@ -281,5 +237,5 @@ For README / landing page "What we back up / What we don't" section:
 **Security properties:**
 - Secrets found inline in config files are encrypted inside the backup archive (never written to unencrypted storage)
 - Unencrypted backups are refused when secrets are detected, unless you explicitly pass `--force-no-encrypt`
-- Symlinks are never followed; path traversal is blocked on restore
-- Telemetry is opt-in, local-only, and captures counts only — never content, paths, or identifiers
+- Symlinks-to-files are followed on backup; symlinks-to-directories are skipped; on restore, writes go through symlinks to the underlying target — symlinks are never replaced with regular files
+- Path traversal is blocked on restore

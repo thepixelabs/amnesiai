@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/thepixelabs/amnesiai/pkg/provider/claude"
@@ -233,7 +234,7 @@ func TestDiscover_PerProject_NonexistentProjectSkipped(t *testing.T) {
 	}
 	// Only global CLAUDE.md; missing project contributes nothing.
 	for _, path := range paths {
-		if filepath.HasPrefix(path, missing) {
+		if strings.HasPrefix(path, missing+string(filepath.Separator)) || path == missing {
 			t.Errorf("Discover returned path from missing project: %s", path)
 		}
 	}
@@ -301,10 +302,10 @@ func TestRestore_SilentlySkipsNonAllowlistedKeys(t *testing.T) {
 	p := claude.NewWithBaseDir(base)
 
 	snapshot := map[string][]byte{
-		"settings.json":     []byte(`{}`),
-		".credentials.json": []byte(`{"token":"should-never-land"}`),
+		"settings.json":       []byte(`{}`),
+		".credentials.json":   []byte(`{"token":"should-never-land"}`),
 		"settings.local.json": []byte(`{"machine":true}`),
-		"unknown.json":      []byte(`{}`),
+		"unknown.json":        []byte(`{}`),
 	}
 
 	if err := p.Restore(snapshot); err != nil {

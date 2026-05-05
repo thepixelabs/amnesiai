@@ -24,6 +24,8 @@ func init() {
 	restoreCmd.Flags().String("id", "", "backup ID to restore (default: latest)")
 	restoreCmd.Flags().StringSlice("providers", nil, "subset of providers to restore")
 	restoreCmd.Flags().Bool("dry-run", false, "show what would be restored without writing")
+	restoreCmd.Flags().String("out-dir", "", "extract files into this directory instead of overwriting real destinations (mirrors the destination layout)")
+	restoreCmd.Flags().Bool("force", false, "with --out-dir: allow writing into a non-empty directory (existing files are never deleted)")
 
 	rootCmd.AddCommand(restoreCmd)
 }
@@ -37,16 +39,22 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	backupID, _ := cmd.Flags().GetString("id")
 	providers, _ := cmd.Flags().GetStringSlice("providers")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
+	outDir, _ := cmd.Flags().GetString("out-dir")
+	force, _ := cmd.Flags().GetBool("force")
 
-	// Resolve passphrase once; interactive prompt only fires here.
 	passphrase := getPassphrase(cmd)
+
+	overrides := buildProviderOverrides()
 
 	restoreOpts := core.RestoreOptions{
 		BackupID:     backupID,
 		Providers:    providers,
 		ProjectPaths: cfg.ProjectPaths,
+		Overrides:    overrides,
 		Passphrase:   passphrase,
 		DryRun:       dryRun,
+		OutDir:       outDir,
+		Force:        force,
 	}
 
 	// Always do a metadata peek first (dry-run = true) so we can warn about
@@ -55,6 +63,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		BackupID:     backupID,
 		Providers:    providers,
 		ProjectPaths: cfg.ProjectPaths,
+		Overrides:    overrides,
 		Passphrase:   passphrase,
 		DryRun:       true,
 	})
@@ -69,8 +78,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(cmd.ErrOrStderr(), "  <REDACTED:...> placeholders that will overwrite your real values.")
 		fmt.Fprintln(cmd.ErrOrStderr(), "")
 
-		if !dryRun {
-			// Interactive confirmation — only when stdin is a terminal.
+		if !dryRun && outDir == "" {
 			if xterm.IsTerminal(os.Stdin.Fd()) {
 				fmt.Fprint(cmd.ErrOrStderr(), "Continue? [y/N]: ")
 				scanner := bufio.NewScanner(os.Stdin)
@@ -81,11 +89,9 @@ func runRestore(cmd *cobra.Command, args []string) error {
 					return nil
 				}
 			}
-			// Non-interactive: proceed; the warning was already printed above.
 		}
 	}
 
-	// Dry-run: report using the peek result (already complete).
 	if dryRun {
 		fmt.Fprintf(cmd.OutOrStdout(), "Dry run: would restore %d file(s) from backup %s\n", peek.Files, peek.BackupID)
 		fmt.Fprintf(cmd.OutOrStdout(), "Providers: %s\n", strings.Join(peek.Providers, ", "))
@@ -98,16 +104,23 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Live restore.
+	// Live restore (or out-dir extraction).
 	result, err := core.Restore(store, restoreOpts)
 	if err != nil {
 		return fmt.Errorf("restore failed: %w", err)
 	}
 
+	if result.OutDir != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "Extracted %d file(s) from backup %s into %s\n",
+			result.Files, result.BackupID, result.OutDir)
+		fmt.Fprintf(cmd.OutOrStdout(), "Providers: %s\n", strings.Join(result.Providers, ", "))
+		fmt.Fprintln(cmd.OutOrStdout(), "(no real destinations were touched; inspect the directory before re-running without --out-dir)")
+		return nil
+	}
+
 	fmt.Fprintf(cmd.OutOrStdout(), "Restored %d file(s) from backup %s\n", result.Files, result.BackupID)
 	fmt.Fprintf(cmd.OutOrStdout(), "Providers: %s\n", strings.Join(result.Providers, ", "))
 
-	// Post-restore: warn about files that still contain <REDACTED: placeholders.
 	if len(result.PlaceholderFiles) > 0 {
 		fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: the following restored files contain <REDACTED:...> placeholders.")
 		fmt.Fprintln(cmd.ErrOrStderr(), "  These files were backed up WITHOUT encryption; secrets were redacted.")

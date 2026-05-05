@@ -2047,7 +2047,7 @@
 <span class="t-prompt">~ $ </span><span class="t-cmd">amnesiai <span class="t-flag">backup</span></span>
 <span class="t-out">  ✓ claude-code      ~/.claude/</span>
 <span class="t-out">  ✓ gemini-cli       ~/.gemini/</span>
-<span class="t-out">  ✓ github-copilot   ~/.config/github-copilot/</span>
+<span class="t-out">  ✓ github-copilot   ~/.copilot/</span>
 <span class="t-out">  ✓ codex-cli        ~/.codex/</span>
 <span class="t-out">  snapshot → v2026.04.16-083412.age</span>
 
@@ -2220,10 +2220,10 @@
             </div>
           </div>
           <ul class="provider-card__files">
-            <li>CLAUDE.md</li>
-            <li>settings.json</li>
-            <li>settings.local.json</li>
-            <li>todos/, ide/</li>
+            <li>CLAUDE.md, settings.json</li>
+            <li>keybindings.json</li>
+            <li>agents/, commands/</li>
+            <li>skills/</li>
           </ul>
           <div class="provider-card__dir">~/.claude/</div>
         </div>
@@ -2240,9 +2240,10 @@
             </div>
           </div>
           <ul class="provider-card__files">
-            <li>GEMINI.md</li>
-            <li>settings.json</li>
-            <li>themes/</li>
+            <li>GEMINI.md, settings.json</li>
+            <li>themes/, extensions/</li>
+            <li>agents/, commands/</li>
+            <li>projects.json, trustedFolders.json</li>
           </ul>
           <div class="provider-card__dir">~/.gemini/</div>
         </div>
@@ -2259,9 +2260,11 @@
             </div>
           </div>
           <ul class="provider-card__files">
-            <li>*.json (hosts, settings…)</li>
+            <li>settings.json, config.json</li>
+            <li>mcp-config.json, lsp-config.json</li>
+            <li>agents/*.agent.md</li>
           </ul>
-          <div class="provider-card__dir">~/.config/github-copilot/</div>
+          <div class="provider-card__dir">~/.copilot/</div>
         </div>
 
         <!-- Codex CLI -->
@@ -2276,9 +2279,9 @@
             </div>
           </div>
           <ul class="provider-card__files">
-            <li>config.json</li>
-            <li>instructions.md</li>
-            <li>themes/</li>
+            <li>config.toml, AGENTS.md</li>
+            <li>agents/, rules/</li>
+            <li>memories/, skills/</li>
           </ul>
           <div class="provider-card__dir">~/.codex/</div>
         </div>
