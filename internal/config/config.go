@@ -71,6 +71,12 @@ func DefaultProviders() []string {
 	return []string{"claude", "gemini", "copilot", "codex"}
 }
 
+// DefaultBackupDir returns the default backup directory path (~/.amnesiai/backups).
+func DefaultBackupDir() string {
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".amnesiai", "backups")
+}
+
 // DefaultConfig returns a Config populated with sensible defaults.
 func DefaultConfig() Config {
 	home, _ := os.UserHomeDir()

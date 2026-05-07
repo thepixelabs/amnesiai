@@ -378,15 +378,20 @@ func (m MenuModel) View() string {
 			sb.WriteString("  " + hotkey + " " + label)
 		}
 		sb.WriteRune('\n')
-		if m.verbose && entry.description != "" {
-			sb.WriteString("       " + MutedStyle.Render(entry.description) + "\n")
-		}
 	}
 	sb.WriteRune('\n')
 
 	// Static footer — no animation.
 	sb.WriteString(MutedStyle.Render(" ↑↓ navigate · Enter select · hotkey direct · q quit"))
 	sb.WriteRune('\n')
+
+	// Verbose: single description line below the footer, keyed to current cursor.
+	if m.verbose {
+		desc := menuEntries[m.cursor].description
+		if desc != "" {
+			sb.WriteString(MutedStyle.Render("  ↳ "+desc) + "\n")
+		}
+	}
 
 	return sb.String()
 }

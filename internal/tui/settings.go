@@ -33,6 +33,7 @@ const (
 	SettingsActionToggleAutoPrune                  // flip config.Retention.AutoPrune
 	SettingsActionEditRetention                    // open the retention editor (keep_last + max_age_days)
 	SettingsActionPruneNow                         // run prune against current policy
+	SettingsActionChangeBackupDir                  // change the backup directory path
 	SettingsActionBack                             // return to main menu
 )
 
@@ -61,13 +62,16 @@ type SettingsModel struct {
 	state       *config.State
 	result      SettingsResult
 	width       int
+	verbose     bool   // when true, render each entry's description line
 	infoMessage string // transient line shown after a toggle
 }
 
-// settingsEntry pairs the label shown in the UI with its action code.
+// settingsEntry pairs the label shown in the UI with its action code and an
+// optional description shown under the label when verbose mode is on.
 type settingsEntry struct {
-	label  string
-	action SettingsAction
+	label       string
+	description string
+	action      SettingsAction
 }
 
 // buildEntries constructs the settings menu entries, incorporating live toggle state.
@@ -98,22 +102,26 @@ func buildEntries(cfg config.Config) []settingsEntry {
 			cfg.Retention.KeepLast, cfg.Retention.MaxAgeDays)
 	}
 
+	backupDirLabel := "Backup location: " + cfg.BackupDir
+
 	return []settingsEntry{
-		{"Re-run onboarding wizard", SettingsActionRerunOnboard},
-		{"View config file path", SettingsActionViewConfig},
-		{providerLabel, SettingsActionPickProviders},
-		{backupFilesLabel, SettingsActionToggleBackupFiles},
-		{verboseLabel, SettingsActionToggleVerbose},
-		{autoPruneLabel, SettingsActionToggleAutoPrune},
-		{retentionLabel, SettingsActionEditRetention},
-		{"Prune now", SettingsActionPruneNow},
-		{"View remote bindings (state.json)", SettingsActionViewBindings},
-		{"Back to main menu", SettingsActionBack},
+		{"Re-run onboarding wizard", "Walk through the initial setup again to change storage mode or remote.", SettingsActionRerunOnboard},
+		{"View config file path", "Print the location of ~/.amnesiai/config.toml.", SettingsActionViewConfig},
+		{providerLabel, "Choose which providers are pre-selected when you run a backup.", SettingsActionPickProviders},
+		{backupFilesLabel, "Toggle between showing a full per-file path list or just counts after a backup.", SettingsActionToggleBackupFiles},
+		{verboseLabel, "Toggle description text under each menu item.", SettingsActionToggleVerbose},
+		{autoPruneLabel, "Toggle whether old backups are pruned automatically after each new backup.", SettingsActionToggleAutoPrune},
+		{retentionLabel, "Set how many backups to keep (keep_last) and/or a maximum age in days.", SettingsActionEditRetention},
+		{"Prune now", "Apply the current retention policy immediately and delete old backups.", SettingsActionPruneNow},
+		{"View remote bindings (state.json)", "Show the git-remote accounts bound to this installation.", SettingsActionViewBindings},
+		{backupDirLabel, "Change the directory where backups (and the git repo) are stored.", SettingsActionChangeBackupDir},
+		{"Back to main menu", "Return to the main menu.", SettingsActionBack},
 	}
 }
 
 // NewSettingsModel creates a settings model seeded with current config and state.
-func NewSettingsModel(cfg config.Config, st *config.State) SettingsModel {
+// When verbose is true each entry's description line is shown beneath its label.
+func NewSettingsModel(cfg config.Config, st *config.State, verbose bool) SettingsModel {
 	if st == nil {
 		st, _ = config.LoadState()
 		if st == nil {
@@ -121,7 +129,7 @@ func NewSettingsModel(cfg config.Config, st *config.State) SettingsModel {
 			st = empty
 		}
 	}
-	return SettingsModel{cfg: cfg, state: st}
+	return SettingsModel{cfg: cfg, state: st, verbose: verbose}
 }
 
 func (m SettingsModel) Init() tea.Cmd { return nil }
@@ -161,6 +169,7 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch action {
 			case SettingsActionToggleVerbose:
 				m.cfg.VerboseHelp = !m.cfg.VerboseHelp
+				m.verbose = m.cfg.VerboseHelp
 				m.result.NewVerboseHelp = m.cfg.VerboseHelp
 				if m.cfg.VerboseHelp {
 					m.infoMessage = "Verbose help enabled."
@@ -177,6 +186,16 @@ func (m SettingsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.infoMessage = "Backup output: full file list."
 				} else {
 					m.infoMessage = "Backup output: counts only."
+				}
+				return m, nil
+
+			case SettingsActionToggleAutoPrune:
+				m.cfg.Retention.AutoPrune = !m.cfg.Retention.AutoPrune
+				m.result.NewAutoPrune = m.cfg.Retention.AutoPrune
+				if m.cfg.Retention.AutoPrune {
+					m.infoMessage = "Auto-prune: ON"
+				} else {
+					m.infoMessage = "Auto-prune: OFF"
 				}
 				return m, nil
 
@@ -208,6 +227,15 @@ func (m SettingsModel) View() string {
 	}
 
 	sb.WriteString("\n" + wMuted.Render("  ↑↓ navigate · Enter select · q back") + "\n")
+
+	// Verbose: single description line below the footer, keyed to current cursor.
+	if m.verbose {
+		desc := entries[m.cursor].description
+		if desc != "" {
+			sb.WriteString(wMuted.Render("  ↳ "+desc) + "\n")
+		}
+	}
+
 	return sb.String()
 }
 
@@ -261,8 +289,10 @@ func FormatRemoteBindings(st *config.State) string {
 
 // RunSettings runs the settings menu and returns the result and the (potentially
 // mutated) config.  Callers must persist the config if toggles changed.
+// verbose mirrors config.VerboseHelp and controls whether description text is
+// shown under each settings entry.
 func RunSettings(cfg config.Config, st *config.State) (SettingsResult, config.Config, error) {
-	model := NewSettingsModel(cfg, st)
+	model := NewSettingsModel(cfg, st, cfg.VerboseHelp)
 	p := tea.NewProgram(model)
 	final, err := p.Run()
 	if err != nil {

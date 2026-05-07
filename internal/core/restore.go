@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/thepixelabs/amnesiai/internal/crypto"
@@ -36,6 +37,7 @@ type RestoreResult struct {
 	DryRun            bool
 	OutDir            string
 	Files             int      // number of files restored
+	RestoredPaths     []string // destination paths of files actually written (live restore only)
 	UnencryptedBackup bool     // true if the source backup was not encrypted
 	PlaceholderFiles  []string // archive paths of files that contain <REDACTED: markers
 }
@@ -146,6 +148,7 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 	// Live restore.
 	totalFiles := 0
 	var restoredProviders []string
+	var restoredPaths []string
 	for provName, snapshot := range providerSnapshots {
 		p, err := provider.Get(provName, provider.ProviderOpts{
 			ProjectPaths: opts.ProjectPaths,
@@ -158,13 +161,18 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		}
 		restoredProviders = append(restoredProviders, provName)
 		totalFiles += len(snapshot)
+		for origPath := range snapshot {
+			restoredPaths = append(restoredPaths, origPath)
+		}
 	}
+	sort.Strings(restoredPaths)
 
 	return &RestoreResult{
 		BackupID:          backupID,
 		Providers:         restoredProviders,
 		DryRun:            false,
 		Files:             totalFiles,
+		RestoredPaths:     restoredPaths,
 		UnencryptedBackup: !meta.Encrypted,
 		PlaceholderFiles:  placeholderFiles,
 	}, nil
