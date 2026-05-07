@@ -1,3 +1,9 @@
+## [0.3.0](https://github.com/thepixelabs/amnesiai/compare/v0.2.0...v0.3.0) (2026-05-07)
+
+### Features
+
+* TUI UX improvements — restore filtering, settings polish, dir picker ([#2](https://github.com/thepixelabs/amnesiai/issues/2)) ([7dfda15](https://github.com/thepixelabs/amnesiai/commit/7dfda15577f9941369175bd0efea54123c0713e2))
+
 ## [0.2.0](https://github.com/thepixelabs/amnesiai/compare/v0.1.0...v0.2.0) (2026-05-05)
 
 ### Features
