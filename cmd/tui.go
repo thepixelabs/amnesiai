@@ -147,6 +147,22 @@ func runOnboardingFlow() error {
 		}
 
 	case "git-remote":
+		// The wizard may have collected a user-chosen backup directory. Apply it
+		// to cfg.BackupDir (with ~/ expansion + absolute-path validation) before
+		// initialising the remote so the clone lives where the user asked.
+		if result.BackupDir != "" {
+			chosen := result.BackupDir
+			if strings.HasPrefix(chosen, "~/") {
+				if home, herr := os.UserHomeDir(); herr == nil {
+					chosen = filepath.Join(home, chosen[2:])
+				}
+			}
+			if !filepath.IsAbs(chosen) {
+				fmt.Fprintf(os.Stderr, "warning: chosen backup dir %q is not absolute — using default %s\n", result.BackupDir, cfg.BackupDir)
+			} else {
+				cfg.BackupDir = chosen
+			}
+		}
 		url, initErr := storage.InitGitRemote(storage.InitGitRemoteOptions{
 			Dir:        cfg.BackupDir,
 			RepoURL:    result.RemoteURL,
@@ -619,6 +635,50 @@ func pluralFile(n int) string {
 	return "files"
 }
 
+// tuiWarnUnencryptedBackup prints the unencrypted-backup warning and asks the
+// user to confirm.  Returns true if the restore should proceed, false if the
+// user declined.  Only prompts when mode is live (not dry-run, not out-dir).
+func tuiWarnUnencryptedBackup(result *core.RestoreResult, r *bufio.Reader) bool {
+	if !result.UnencryptedBackup {
+		return true
+	}
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "WARNING: This backup is UNENCRYPTED. File contents may contain")
+	fmt.Fprintln(os.Stderr, "  <REDACTED:...> placeholders that will overwrite your real values.")
+	fmt.Fprintln(os.Stderr, "")
+	if result.DryRun || result.OutDir != "" {
+		// No confirmation needed for non-live modes.
+		return true
+	}
+	return tuiConfirm("Continue with live restore", false, r)
+}
+
+// tuiPrintRestoreResult prints the outcome of a restore operation.
+func tuiPrintRestoreResult(result *core.RestoreResult) {
+	switch {
+	case result.DryRun:
+		fmt.Printf("%s Would restore %d file(s) from %s\n", tuiSuccessStyle.Render("Dry run:"), result.Files, result.BackupID)
+	case result.OutDir != "":
+		fmt.Printf("%s Extracted %d file(s) from %s into %s\n",
+			tuiSuccessStyle.Render("Inspect:"), result.Files, result.BackupID, result.OutDir)
+		fmt.Println(tuiMutedStyle.Render("(no real destinations were touched)"))
+	default:
+		fmt.Printf("%s Restored %d file(s) from %s\n", tuiSuccessStyle.Render("Applied:"), result.Files, result.BackupID)
+		if len(result.RestoredPaths) > 0 {
+			fmt.Println()
+			fmt.Println(tuiAccentStyle.Render("Files restored"))
+			for _, p := range result.RestoredPaths {
+				fmt.Println("  " + tuiMutedStyle.Render(p))
+			}
+		}
+	}
+	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Providers:"), strings.Join(result.Providers, ", "))
+	if len(result.UnknownFiles) > 0 {
+		fmt.Fprintf(os.Stderr, "WARNING: %d file(s) requested by --files were not found: %v\n",
+			len(result.UnknownFiles), result.UnknownFiles)
+	}
+}
+
 func (ui *legacyUI) restoreFlow() error {
 	store, entries, err := tuiLoadEntries()
 	if err != nil {
@@ -640,6 +700,134 @@ func (ui *legacyUI) restoreFlow() error {
 		return tuiHandleInputErr(err)
 	}
 
+	// Ask whether the user wants to cherry-pick individual files.
+	fmt.Println()
+	fmt.Println(tuiAccentStyle.Render("File selection"))
+	fmt.Println("  [a] Restore all files (default)")
+	fmt.Println("  [c] Cherry-pick individual files")
+	cherryChoice, choiceErr := tuiPrompt("Choose [a/c]", ui.reader())
+	if choiceErr != nil {
+		return tuiHandleInputErr(choiceErr)
+	}
+
+	var selectedFiles []string
+	if strings.ToLower(strings.TrimSpace(cherryChoice)) == "c" {
+		// Cherry-pick: collect passphrase early so PeekArchive can decrypt.
+		passphrase := getPassphrase(ui.cmd)
+		if passphrase == "" {
+			noEncrypt, _ := ui.cmd.InheritedFlags().GetBool("no-encrypt")
+			if !noEncrypt {
+				pp, ppErr := internaltui.ReadPassphrase("Decryption passphrase", false)
+				if ppErr != nil {
+					return tuiHandleInputErr(ppErr)
+				}
+				passphrase = pp
+			}
+		}
+
+		var manifest []core.ManifestEntry
+		if spinErr := tuiWithSpinner("Loading backup manifest", func() error {
+			var peekErr error
+			manifest, _, peekErr = core.PeekArchive(store, entry.ID, passphrase)
+			return peekErr
+		}); spinErr != nil {
+			tuiPrintError(fmt.Errorf("peek failed: %w", spinErr))
+			return nil
+		}
+
+		// Filter manifest to only the selected providers.
+		var filtered []core.ManifestEntry
+		for _, me := range manifest {
+			if contains(providers, me.Provider) {
+				filtered = append(filtered, me)
+			}
+		}
+		if len(filtered) == 0 {
+			tuiPrintError(fmt.Errorf("no files found in backup for selected providers"))
+			return nil
+		}
+
+		picker := internaltui.NewFilePickerModel(filtered, nil)
+		p := tea.NewProgram(picker, tea.WithAltScreen())
+		finalModel, runErr := p.Run()
+		if runErr != nil {
+			return tuiHandleInputErr(runErr)
+		}
+		fp, ok := finalModel.(internaltui.FilePickerModel)
+		if !ok {
+			return nil
+		}
+		if fp.Cancelled() {
+			return nil
+		}
+		selectedFiles = fp.SelectedArchPaths()
+		if len(selectedFiles) == 0 {
+			tuiPrintError(fmt.Errorf("no files selected"))
+			return nil
+		}
+
+		// Now proceed with the rest of the flow, but passphrase is already known.
+		mode, outDir, modeErr := tuiPickRestoreMode(ui.reader())
+		if modeErr != nil {
+			return tuiHandleInputErr(modeErr)
+		}
+		if mode == restoreModeCancel {
+			return nil
+		}
+
+		// Dry-run peek to detect unencrypted backup before committing to a live restore.
+		var peek *core.RestoreResult
+		if spinErr := tuiWithSpinner("Checking backup", func() error {
+			var peekErr error
+			peek, peekErr = core.Restore(store, core.RestoreOptions{
+				BackupID:     entry.ID,
+				Providers:    providers,
+				ProjectPaths: cfg.ProjectPaths,
+				Overrides:    buildProviderOverrides(),
+				Passphrase:   passphrase,
+				DryRun:       true,
+				Files:        selectedFiles,
+			})
+			return peekErr
+		}); spinErr != nil {
+			tuiPrintError(fmt.Errorf("restore failed: %w", spinErr))
+			return nil
+		}
+		if !tuiWarnUnencryptedBackup(peek, ui.reader()) {
+			fmt.Fprintln(os.Stdout, "Restore cancelled.")
+			return nil
+		}
+
+		opts := core.RestoreOptions{
+			BackupID:     entry.ID,
+			Providers:    providers,
+			ProjectPaths: cfg.ProjectPaths,
+			Overrides:    buildProviderOverrides(),
+			Passphrase:   passphrase,
+			DryRun:       mode == restoreModeDryRun,
+			OutDir:       outDir,
+			Files:        selectedFiles,
+		}
+
+		var result *core.RestoreResult
+		if spinErr := tuiWithSpinner("Restoring backup", func() error {
+			var opErr error
+			result, opErr = core.Restore(store, opts)
+			return opErr
+		}); spinErr != nil {
+			tuiPrintError(fmt.Errorf("restore failed: %w", spinErr))
+			return nil
+		}
+
+		tuiClearScreen()
+		tuiPrintSubHeader("Restore result")
+		tuiPrintRestoreResult(result)
+		tuiPause(ui.reader())
+		return nil
+	}
+
+	// Standard (all-files) path — original flow continues below.
+
 	mode, outDir, err := tuiPickRestoreMode(ui.reader())
 	if err != nil {
 		return tuiHandleInputErr(err)
@@ -660,6 +848,28 @@ func (ui *legacyUI) restoreFlow() error {
 		}
 	}
 
+	// Dry-run peek to detect unencrypted backup before committing to a live restore.
+	var allPeek *core.RestoreResult
+	if spinErr := tuiWithSpinner("Checking backup", func() error {
+		var peekErr error
+		allPeek, peekErr = core.Restore(store, core.RestoreOptions{
+			BackupID:     entry.ID,
+			Providers:    providers,
+			ProjectPaths: cfg.ProjectPaths,
+			Overrides:    buildProviderOverrides(),
+			Passphrase:   passphrase,
+			DryRun:       true,
+		})
+		return peekErr
+	}); spinErr != nil {
+		tuiPrintError(fmt.Errorf("restore failed: %w", spinErr))
+		return nil
+	}
+	if !tuiWarnUnencryptedBackup(allPeek, ui.reader()) {
+		fmt.Fprintln(os.Stdout, "Restore cancelled.")
+		return nil
+	}
+
 	opts := core.RestoreOptions{
 		BackupID:     entry.ID,
 		Providers:    providers,
@@ -668,6 +878,7 @@ func (ui *legacyUI) restoreFlow() error {
 		Passphrase:   passphrase,
 		DryRun:       mode == restoreModeDryRun,
 		OutDir:       outDir,
+		Files:        selectedFiles, // nil = all files
 	}
 
 	var result *core.RestoreResult
@@ -682,25 +893,7 @@ func (ui *legacyUI) restoreFlow() error {
 
 	tuiClearScreen()
 	tuiPrintSubHeader("Restore result")
-	switch {
-	case result.DryRun:
-		fmt.Printf("%s Would restore %d file(s) from %s\n", tuiSuccessStyle.Render("Dry run:"), result.Files, result.BackupID)
-	case result.OutDir != "":
-		fmt.Printf("%s Extracted %d file(s) from %s into %s\n",
-			tuiSuccessStyle.Render("Inspect:"), result.Files, result.BackupID, result.OutDir)
-		fmt.Println(tuiMutedStyle.Render("(no real destinations were touched)"))
-	default:
-		fmt.Printf("%s Restored %d file(s) from %s\n", tuiSuccessStyle.Render("Applied:"), result.Files, result.BackupID)
-		if len(result.RestoredPaths) > 0 {
-			fmt.Println()
-			fmt.Println(tuiAccentStyle.Render("Files restored"))
-			for _, p := range result.RestoredPaths {
-				fmt.Println("  " + tuiMutedStyle.Render(p))
-			}
-		}
-	}
-	fmt.Printf("%s %s\n", tuiSuccessStyle.Render("Providers:"), strings.Join(result.Providers, ", "))
-
+	tuiPrintRestoreResult(result)
 	tuiPause(ui.reader())
 	return nil
 }

@@ -26,6 +26,7 @@ func init() {
 	restoreCmd.Flags().Bool("dry-run", false, "show what would be restored without writing")
 	restoreCmd.Flags().String("out-dir", "", "extract files into this directory instead of overwriting real destinations (mirrors the destination layout)")
 	restoreCmd.Flags().Bool("force", false, "with --out-dir: allow writing into a non-empty directory (existing files are never deleted)")
+	restoreCmd.Flags().StringSlice("files", nil, "subset of archive paths to restore (e.g. claude/agents/foo.md). Empty = all files in selected providers")
 
 	rootCmd.AddCommand(restoreCmd)
 }
@@ -41,6 +42,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	outDir, _ := cmd.Flags().GetString("out-dir")
 	force, _ := cmd.Flags().GetBool("force")
+	files, _ := cmd.Flags().GetStringSlice("files")
 
 	passphrase := getPassphrase(cmd)
 
@@ -55,6 +57,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		DryRun:       dryRun,
 		OutDir:       outDir,
 		Force:        force,
+		Files:        files,
 	}
 
 	// Always do a metadata peek first (dry-run = true) so we can warn about
@@ -66,6 +69,7 @@ func runRestore(cmd *cobra.Command, args []string) error {
 		Overrides:    overrides,
 		Passphrase:   passphrase,
 		DryRun:       true,
+		Files:        files,
 	})
 	if err != nil {
 		return fmt.Errorf("restore failed: %w", err)
@@ -120,6 +124,11 @@ func runRestore(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Restored %d file(s) from backup %s\n", result.Files, result.BackupID)
 	fmt.Fprintf(cmd.OutOrStdout(), "Providers: %s\n", strings.Join(result.Providers, ", "))
+
+	if len(result.UnknownFiles) > 0 {
+		fmt.Fprintf(cmd.ErrOrStderr(), "WARNING: %d file(s) requested by --files were not found: %v\n",
+			len(result.UnknownFiles), result.UnknownFiles)
+	}
 
 	if len(result.PlaceholderFiles) > 0 {
 		fmt.Fprintln(cmd.ErrOrStderr(), "WARNING: the following restored files contain <REDACTED:...> placeholders.")
