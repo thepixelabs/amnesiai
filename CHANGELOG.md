@@ -1,3 +1,9 @@
+## [0.5.0](https://github.com/thepixelabs/amnesiai/compare/v0.4.0...v0.5.0) (2026-05-31)
+
+### Features
+
+* filter provider picker to only installed providers ([#4](https://github.com/thepixelabs/amnesiai/issues/4)) ([2c120cf](https://github.com/thepixelabs/amnesiai/commit/2c120cf6151dbe02a25adab55f39c5b66940f941))
+
 ## [0.4.0](https://github.com/thepixelabs/amnesiai/compare/v0.3.0...v0.4.0) (2026-05-31)
 
 ### Features
