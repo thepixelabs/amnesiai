@@ -1,3 +1,9 @@
+## [0.5.1](https://github.com/thepixelabs/amnesiai/compare/v0.5.0...v0.5.1) (2026-05-31)
+
+### Bug Fixes
+
+* **docs:** correct topbar wordmark to "Pixelabs" ([52a80f9](https://github.com/thepixelabs/amnesiai/commit/52a80f96ea94082902fbcd6c521773defe370716))
+
 ## [0.5.0](https://github.com/thepixelabs/amnesiai/compare/v0.4.0...v0.5.0) (2026-05-31)
 
 ### Features
