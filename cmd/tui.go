@@ -1062,7 +1062,47 @@ func (ui *legacyUI) listFlow() error {
 // ─── Provider picker (Bubbletea sub-program) ──────────────────────────────────
 
 func tuiPickProviders(defaults []string) ([]string, error) {
-	return tuiPickProvidersFrom(providerregistry.Names(), defaults)
+	available := presentProvidersNow()
+	if len(available) == 0 {
+		return nil, fmt.Errorf("no AI providers detected on this system (looked for %s)",
+			strings.Join(providerregistry.Names(), "/"))
+	}
+	return tuiPickProvidersFrom(available, defaults)
+}
+
+// presentProviderNames returns the subset of names whose getter-built provider
+// reports at least one file via Discover(). Pure: takes a name list and a
+// constructor so callers can wire a fake registry in tests.
+//
+// Providers whose constructor or Discover() returns an error are silently
+// skipped — absence is the user-visible signal, not a panic.
+func presentProviderNames(names []string, getter func(string) (providerregistry.Provider, error)) []string {
+	out := make([]string, 0, len(names))
+	for _, name := range names {
+		p, err := getter(name)
+		if err != nil {
+			continue
+		}
+		paths, derr := p.Discover()
+		if derr != nil || len(paths) == 0 {
+			continue
+		}
+		out = append(out, name)
+	}
+	return out
+}
+
+// presentProvidersNow wraps presentProviderNames with the real registry and the
+// current cfg-derived ProviderOpts. Called from both backup and settings
+// pickers so the user only sees providers actually installed on this machine.
+func presentProvidersNow() []string {
+	opts := providerregistry.ProviderOpts{
+		ProjectPaths: cfg.ProjectPaths,
+		Overrides:    buildProviderOverrides(),
+	}
+	return presentProviderNames(providerregistry.Names(), func(name string) (providerregistry.Provider, error) {
+		return providerregistry.Get(name, opts)
+	})
 }
 
 // tuiPickProvidersFrom runs the provider picker with an explicit available set.
