@@ -24,6 +24,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/thepixelabs/amnesiai/internal/config"
 )
 
 // ─── Result ───────────────────────────────────────────────────────────────────
@@ -54,6 +56,12 @@ type WizardResult struct {
 	// RepoName is the repository name to pass to gh/glab for creation.
 	// Only meaningful when CreateRepo==true.
 	RepoName string
+
+	// BackupDir is the on-disk directory chosen for the local working clone
+	// of the git-remote repo.  Empty when the user did not pick a custom dir
+	// (caller should fall back to config.DefaultBackupDir()).  Only set when
+	// StorageMode == "git-remote".
+	BackupDir string
 }
 
 // ─── Wizard steps ─────────────────────────────────────────────────────────────
@@ -67,6 +75,7 @@ const (
 	stepGRAccount                        // pick authenticated account (git-remote only)
 	stepGRRepoChoice                     // use existing URL or create new repo
 	stepGRRepoInput                      // text input: URL or repo name
+	stepGRBackupDir                      // pick the on-disk folder for the working clone (git-remote only)
 	stepPassphraseNote                   // advisory — no choice needed
 	stepDone                             // sentinel
 )
@@ -116,6 +125,11 @@ type OnboardingModel struct {
 	// Text input state for the repo URL / repo name steps.
 	textInput     string
 	textInputHint string // placeholder hint rendered when empty
+
+	// Embedded directory picker, used only while step == stepGRBackupDir.
+	// We reuse DirPickerModel so the wizard gets the same path autocomplete
+	// behaviour as the settings menu.
+	dirPicker DirPickerModel
 }
 
 // NewOnboardingModel creates a fresh wizard model.
@@ -159,6 +173,10 @@ func (m OnboardingModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Text-input steps consume most keys differently.
 		if m.step == stepGRRepoInput {
 			return m.updateTextInput(msg)
+		}
+		// Dir-picker step delegates all key handling to the embedded model.
+		if m.step == stepGRBackupDir {
+			return m.updateDirPicker(msg)
 		}
 
 		switch msg.String() {
@@ -210,6 +228,33 @@ func (m OnboardingModel) updateTextInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else if s == "space" {
 			m.textInput += " "
 		}
+	}
+	return m, nil
+}
+
+// updateDirPicker forwards a key message to the embedded DirPickerModel and
+// observes its confirmed/cancelled flags to drive wizard advancement.  The
+// dirpicker normally issues tea.Quit on confirm/cancel; we deliberately swallow
+// that cmd because here it lives inside the wizard program.
+func (m OnboardingModel) updateDirPicker(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, _ := m.dirPicker.Update(msg)
+	dp, ok := updated.(DirPickerModel)
+	if !ok {
+		return m, nil
+	}
+	m.dirPicker = dp
+
+	if dp.confirmed {
+		m.result.BackupDir = strings.TrimSpace(dp.input)
+		m.step = stepPassphraseNote
+		m.cursor = 0
+		return m, nil
+	}
+	if dp.cancelled {
+		// Esc / ctrl+c / q in the dirpicker aborts the wizard, matching the
+		// "ctrl+c abort" behaviour available on every other step.
+		m.aborted = true
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -293,6 +338,16 @@ func (m OnboardingModel) commit() (OnboardingModel, tea.Cmd) {
 		} else {
 			m.result.RemoteURL = value
 		}
+		// Seed the dir picker with the configured default and advance.
+		def := config.DefaultBackupDir()
+		m.dirPicker = DirPickerModel{input: def, defaultDir: def, cursor: -1}
+		m.dirPicker.refreshSuggestions()
+		m.step = stepGRBackupDir
+		m.cursor = 0
+
+	case stepGRBackupDir:
+		// Selection is handled in updateDirPicker; commit() should not be
+		// reachable for this step under normal flow, but guard anyway.
 		m.step = stepPassphraseNote
 		m.cursor = 0
 
@@ -372,6 +427,8 @@ func (m OnboardingModel) currentChoiceCount() int {
 		return 2 // existing URL or create new
 	case stepGRRepoInput:
 		return 0 // text input — no arrow choices
+	case stepGRBackupDir:
+		return 0 // dir picker — sub-model handles its own navigation
 	case stepPassphraseNote:
 		return 1
 	}
@@ -399,15 +456,21 @@ func (m OnboardingModel) View() string {
 		m.renderGRRepoChoice(&sb)
 	case stepGRRepoInput:
 		m.renderGRRepoInput(&sb)
+	case stepGRBackupDir:
+		m.renderGRBackupDir(&sb)
 	case stepPassphraseNote:
 		m.renderPassphraseNote(&sb)
 	case stepDone:
 		sb.WriteString(wSuccess.Render("  Setup complete.") + "\n")
 	}
 
-	if m.step == stepGRRepoInput {
+	switch m.step {
+	case stepGRRepoInput:
 		sb.WriteString("\n" + wMuted.Render("  Enter confirm · ctrl+c abort") + "\n")
-	} else {
+	case stepGRBackupDir:
+		// DirPickerModel.View already includes its own help footer; don't
+		// double-print.
+	default:
 		sb.WriteString("\n" + wMuted.Render("  ↑↓ navigate · Enter select · ctrl+c abort") + "\n")
 	}
 	return sb.String()
@@ -507,6 +570,13 @@ func (m OnboardingModel) renderGRRepoInput(sb *strings.Builder) {
 	} else {
 		sb.WriteString("  " + wAccent.Render("▸ ") + wNormal.Render(display) + cursor + "\n")
 	}
+}
+
+func (m OnboardingModel) renderGRBackupDir(sb *strings.Builder) {
+	sb.WriteString(wPrompt.Render("  Where on disk should backups live?") + "\n\n")
+	sb.WriteString(wMuted.Render("  Default: "+config.DefaultBackupDir()) + "\n")
+	sb.WriteString(wMuted.Render("  If you already cloned your backup repo, point this at that folder.") + "\n\n")
+	sb.WriteString(m.dirPicker.View())
 }
 
 func (m OnboardingModel) renderPassphraseNote(sb *strings.Builder) {

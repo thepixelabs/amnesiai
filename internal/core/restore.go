@@ -28,6 +28,12 @@ type RestoreOptions struct {
 	DryRun       bool                                 // if true, report what would change without writing
 	OutDir       string                               // if set, extract to <OutDir>/... instead of real destinations
 	Force        bool                                 // for OutDir: allow non-empty target dir
+	// Files is an optional allowlist of archive paths (e.g. "claude/agents/foo.md")
+	// to restore. Empty = restore every file in each selected provider. When set,
+	// only entries whose ArchPath appears in this list are written. Unknown entries
+	// (path not present in the backup) are silently skipped — callers should
+	// pre-validate via the dry-run peek if they want strict behaviour.
+	Files []string
 }
 
 // RestoreResult holds the outcome of a restore operation.
@@ -40,6 +46,32 @@ type RestoreResult struct {
 	RestoredPaths     []string // destination paths of files actually written (live restore only)
 	UnencryptedBackup bool     // true if the source backup was not encrypted
 	PlaceholderFiles  []string // archive paths of files that contain <REDACTED: markers
+	UnknownFiles      []string // archive paths requested via opts.Files that were not found in the backup
+}
+
+// loadAndExtract loads the backup identified by backupID, decrypts it with
+// passphrase, and extracts the archive.  It is the shared prelude used by
+// Restore and PeekArchive; diff.go performs the same steps inline and should
+// be refactored to call this helper in a future hardening pass.
+func loadAndExtract(store storage.Storage, backupID, passphrase string) (storage.Metadata, map[string][]byte, []ManifestEntry, error) {
+	meta, payload, err := store.Load(backupID)
+	if err != nil {
+		return storage.Metadata{}, nil, nil, fmt.Errorf("load backup %s: %w", backupID, err)
+	}
+
+	// payload is not zeroed after decryption — see Restore for the same policy;
+	// a hardening pass should update both.
+	payload, err = crypto.Decrypt(passphrase, payload)
+	if err != nil {
+		return storage.Metadata{}, nil, nil, fmt.Errorf("decrypt backup %s: %w", backupID, err)
+	}
+
+	archiveFiles, manifest, err := ExtractArchive(payload)
+	if err != nil {
+		return storage.Metadata{}, nil, nil, fmt.Errorf("extract backup %s: %w", backupID, err)
+	}
+
+	return meta, archiveFiles, manifest, nil
 }
 
 // Restore loads a backup from storage, decrypts it, extracts the archive,
@@ -54,19 +86,9 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		backupID = latest
 	}
 
-	meta, payload, err := store.Load(backupID)
+	meta, archiveFiles, manifest, err := loadAndExtract(store, backupID, opts.Passphrase)
 	if err != nil {
-		return nil, fmt.Errorf("load backup %s: %w", backupID, err)
-	}
-
-	payload, err = crypto.Decrypt(opts.Passphrase, payload)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt backup %s: %w", backupID, err)
-	}
-
-	archiveFiles, manifest, err := ExtractArchive(payload)
-	if err != nil {
-		return nil, fmt.Errorf("extract backup %s: %w", backupID, err)
+		return nil, err
 	}
 
 	restoreProviders := opts.Providers
@@ -74,10 +96,32 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		restoreProviders = meta.Providers
 	}
 
+	// Build an O(1) lookup set for the file allowlist when one is provided.
+	// matchedFiles tracks which requested paths were actually found so we can
+	// surface unknowns to the caller.
+	var filesAllowlist map[string]bool
+	var matchedFiles map[string]bool
+	if len(opts.Files) > 0 {
+		filesAllowlist = make(map[string]bool, len(opts.Files))
+		matchedFiles = make(map[string]bool, len(opts.Files))
+		for _, f := range opts.Files {
+			filesAllowlist[f] = true
+		}
+	}
+
 	providerSnapshots := make(map[string]map[string][]byte)
 	for _, entry := range manifest {
 		if !containsString(restoreProviders, entry.Provider) {
 			continue
+		}
+		// Allowlist check comes before the provider-snapshot map init so we
+		// never allocate a snapshot map for a provider that contributes zero
+		// matching files (readability; behaviour is unchanged).
+		if filesAllowlist != nil {
+			if !filesAllowlist[entry.ArchPath] {
+				continue
+			}
+			matchedFiles[entry.ArchPath] = true
 		}
 		if _, ok := providerSnapshots[entry.Provider]; !ok {
 			providerSnapshots[entry.Provider] = make(map[string][]byte)
@@ -87,6 +131,22 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 			continue
 		}
 		providerSnapshots[entry.Provider][entry.OrigPath] = data
+	}
+
+	// Compute unknown paths: requested but not present in the backup after
+	// provider filtering.
+	var unknownFiles []string
+	for _, f := range opts.Files {
+		if !matchedFiles[f] {
+			unknownFiles = append(unknownFiles, f)
+		}
+	}
+
+	// When an explicit file list was given and zero entries matched, the caller
+	// almost certainly made a mistake (e.g. wrong provider scope). Return an
+	// error rather than silently "succeeding" with zero files restored.
+	if len(opts.Files) > 0 && len(matchedFiles) == 0 {
+		return nil, fmt.Errorf("no files matched the --files filter; requested: %v", opts.Files)
 	}
 
 	// Scan all files for <REDACTED: markers so we can warn the user post-
@@ -112,6 +172,7 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 			Files:             fileCount,
 			UnencryptedBackup: !meta.Encrypted,
 			PlaceholderFiles:  placeholderFiles,
+			UnknownFiles:      unknownFiles,
 		}, nil
 	}
 
@@ -142,6 +203,7 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 			Files:             totalFiles,
 			UnencryptedBackup: !meta.Encrypted,
 			PlaceholderFiles:  placeholderFiles,
+			UnknownFiles:      unknownFiles,
 		}, nil
 	}
 
@@ -175,6 +237,7 @@ func Restore(store storage.Storage, opts RestoreOptions) (*RestoreResult, error)
 		RestoredPaths:     restoredPaths,
 		UnencryptedBackup: !meta.Encrypted,
 		PlaceholderFiles:  placeholderFiles,
+		UnknownFiles:      unknownFiles,
 	}, nil
 }
 
@@ -296,6 +359,18 @@ func expandHomePath(p string) string {
 		return p
 	}
 	return filepath.Join(home, p[2:])
+}
+
+// PeekArchive loads a backup and returns its manifest entries (archive path,
+// provider, orig path) without writing any files. Used by the TUI to populate
+// the cherry-pick file picker. Decryption errors surface to the caller.
+// The second return value is true when the backup was stored unencrypted.
+func PeekArchive(store storage.Storage, backupID, passphrase string) ([]ManifestEntry, bool, error) {
+	meta, _, manifest, err := loadAndExtract(store, backupID, passphrase)
+	if err != nil {
+		return nil, false, err
+	}
+	return manifest, !meta.Encrypted, nil
 }
 
 func containsString(slice []string, s string) bool {
