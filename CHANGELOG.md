@@ -1,3 +1,9 @@
+## [0.4.0](https://github.com/thepixelabs/amnesiai/compare/v0.3.0...v0.4.0) (2026-05-31)
+
+### Features
+
+* cherry-pick file restore + onboarding backup-dir step ([#3](https://github.com/thepixelabs/amnesiai/issues/3)) ([61d0926](https://github.com/thepixelabs/amnesiai/commit/61d0926f1ad26dcea72e795a914f80676f20416c))
+
 ## [0.3.0](https://github.com/thepixelabs/amnesiai/compare/v0.2.0...v0.3.0) (2026-05-07)
 
 ### Features
